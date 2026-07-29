@@ -1,0 +1,1 @@
+"""Packaged Transcript Weaver resources."""

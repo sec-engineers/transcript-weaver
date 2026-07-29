@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "20260728-183000-a1b2"
+  },
+  "datetime": "2026-07-28T18:30:00Z",
+  "source": {
+    "type": "file",
+    "name": "example-transcript.txt",
+    "reference": "/example/example-transcript.txt"
+  },
+  "transcript": "This is a sanitized example transcript for Transcript Weaver.",
+  "metadata": {}
+}

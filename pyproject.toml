@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "transcript-weaver"
+version = "0.1.0"
+description = "A safe, Unix-style transcript processing pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Transcript Weaver contributors" }]
+keywords = ["transcripts", "cli", "pipeline", "otter"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = ["platformdirs>=4.0,<5"]
+
+[project.optional-dependencies]
+otter = ["playwright>=1.45,<2"]
+dev = [
+  "build>=1.2",
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "pytest-cov>=5",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+trwinp = "transcript_weaver.inp.cli:main"
+trwclean = "transcript_weaver.clean.cli:main"
+trwout = "transcript_weaver.out.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transcript_weaver"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --cov=transcript_weaver --cov-report=term-missing"
+testpaths = ["tests"]
+markers = [
+  "live_otter: opt-in test that accesses the live Otter service and Chrome",
+  "live_gemini: opt-in test that accesses the live Gemini service",
+]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["transcript_weaver"]
+

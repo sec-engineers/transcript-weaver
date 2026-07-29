@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "logging": {
+    "retained_runs": 5
+  }
+}
