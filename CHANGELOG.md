@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Updated live Otter compatibility for relative recording links, Today/Yesterday
+  timestamps, and the current transcript More Options selector; unexpected browser
+  failures now retain a concise underlying cause.
+- Close each dedicated Otter Chrome process launched by Weaver after acquisition, including failure paths.
+- Profile errors now list configured choices and suggest likely spelling corrections.
+- Strengthened the Gemini system contract so `weave` is added at the packet top level.
+
+- Added field-specific configuration diagnostics, safe first-run provisioning of the
+  prototype-derived example prompt, and a ready-to-run CWD-relative test vault profile.
+- Standardized documented vault configuration on a path object while retaining legacy
+  path-string compatibility.
+
 - Made Playwright a standard runtime dependency so a normal installation includes all
   advertised Otter functionality; removed the obsolete Otter extra.
 

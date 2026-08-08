@@ -14,7 +14,8 @@ SYSTEM_INSTRUCTION = (
     "You are one stage in a JSON-to-JSON pipeline. Return exactly one complete JSON "
     "object with no Markdown fences or explanatory prose. Preserve every input field "
     "and value exactly: do not modify or delete anything. Add transformation results "
-    "without changing existing data. Follow the user transformation prompt for "
+    "without changing existing data. Add weave as a TOP-LEVEL sibling of metadata, "
+    "never inside metadata or another field. Follow the user transformation prompt for "
     "classification and content."
 )
 

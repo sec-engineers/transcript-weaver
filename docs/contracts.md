@@ -5,6 +5,14 @@
 Reads a configured source and emits one schema-v1 packet. `datetime` is recording
 time in canonical UTC; `run.id` is correlation identity, not recording time.
 
+## Configuration
+
+First-run setup atomically provisions `config.json` and `prompts/example.md`. Existing
+files are never overwritten. Configuration errors identify their full field path and
+list missing or unexpected fields. Vault path objects use `relative_to` values `cwd` or
+`config` for relative paths and omit it for absolute or `~` paths. Reserved `_comment`
+keys provide inline documentation and are ignored by runtime validation.
+
 ## `trweave PROMPT_OR_PROFILE`
 
 Reads exactly one JSON object and emits exactly one enriched JSON object. Direct

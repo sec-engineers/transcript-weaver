@@ -99,6 +99,24 @@ def test_casefold_duplicates_and_lookup(tmp_path: Path) -> None:
     assert find_profile({"Hello": 1}, "hello", kind="x") == ("Hello", 1)
     with pytest.raises(ConfigurationError, match="Did you mean"):
         find_profile({"transcript-cleanup": {}}, "transcript-cleanu", kind="weave")
+    with pytest.raises(
+        ConfigurationError,
+        match=r"Unknown weave profile .wildly-wrong..*Available profiles: Cleanup",
+    ):
+        find_profile({"Cleanup": {}}, "wildly-wrong", kind="weave")
+
+
+def test_missing_profile_lists_configured_choices(tmp_path: Path) -> None:
+    paths = paths_with_config(tmp_path)
+    weave_stderr = io.StringIO()
+    assert weave_cli.run([], stderr=weave_stderr, paths=paths) == 1
+    assert "No weave profile or prompt file was provided" in weave_stderr.getvalue()
+    assert "Available profiles: Cleanup" in weave_stderr.getvalue()
+
+    out_stderr = io.StringIO()
+    assert out_cli.run([], stderr=out_stderr, paths=paths) == 1
+    assert "No output profile was provided" in out_stderr.getvalue()
+    assert "Available profiles: Journals" in out_stderr.getvalue()
 
 
 def test_path_forms_and_dotted_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -419,3 +437,26 @@ def test_unknown_category_and_invalid_format_are_rejected(tmp_path: Path) -> Non
     paths = paths_with_config(tmp_path / "format", value)
     enriched["weave"]["type"] = "gratitude"
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 1
+
+
+def test_packaged_output_profile_creates_inspectable_cwd_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = ApplicationPaths(tmp_path / "config" / "config.json", tmp_path / "logs")
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    monkeypatch.chdir(run_directory)
+    config = load_or_create_config(paths)
+    enriched = packet()
+    enriched["weave"] = {"type": "dream", "content": "A prototype dream."}
+    operation, target = persist(
+        enriched,
+        "example-journals",
+        config,
+        paths,
+        warn=lambda _: None,
+    )
+    assert operation == "insert"
+    assert target == run_directory / "transcript-weaver-test-output" / "Dream Journal.md"
+    assert target.read_text() == "## 2026-08-05\n\nA prototype dream.\n\n"
+    assert (paths.config_file.parent / "prompts" / "example.md").exists()

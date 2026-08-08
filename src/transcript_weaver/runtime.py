@@ -83,6 +83,8 @@ class StageLog:
             )
             self._handler.setFormatter(formatter)
             self._logger.addHandler(self._handler)
+        else:
+            self._logger.addHandler(self._handler)
 
     def info(self, message: str) -> None:
         self._logger.info(message)

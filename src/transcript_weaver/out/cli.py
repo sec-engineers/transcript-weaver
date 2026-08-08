@@ -16,6 +16,7 @@ from transcript_weaver.config import (
     load_or_create_config,
 )
 from transcript_weaver.out.core import OutputError, persist
+from transcript_weaver.profiles import available_profiles
 from transcript_weaver.runtime import RunIdError, ensure_packet_run_id
 
 
@@ -23,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="trwout", description="Persist an enriched packet using a configured output profile."
     )
-    parser.add_argument("output_profile")
+    parser.add_argument("output_profile", nargs="?", help="configured output profile")
     add_logging_arguments(parser)
     return parser
 
@@ -52,6 +53,11 @@ def run(
     try:
         effective_paths = paths or get_application_paths()
         config = load_or_create_config(effective_paths)
+        if args.output_profile is None:
+            raise ConfigurationError(
+                "No output profile was provided. "
+                f"Available profiles: {available_profiles(config.out)}."
+            )
         packet = _read_packet(stdin)
         run_id = ensure_packet_run_id(packet)
         invocation = start_invocation(

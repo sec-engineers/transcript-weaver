@@ -72,9 +72,22 @@ stage; a malformed ID is rejected.
 
 ## Configuration
 
-On first use, the packaged schema-v1 configuration is copied atomically to the
-platform's per-user configuration directory. An existing file is never merged,
-migrated, repaired, or overwritten. Tests always inject disposable paths.
+On first use, the packaged schema-v1 configuration and prototype-derived
+`prompts/example.md` are copied atomically to the platform's per-user configuration
+directory. Existing files are never merged, migrated, repaired, or overwritten. Tests
+always inject disposable paths.
+
+Older configuration files are not automatically migrated. If you want to replace an
+early prototype configuration with the complete example, first back it up and then run
+a command so Transcript Weaver can create the new defaults:
+
+```bash
+mv ~/.config/transcript-weaver/config.json ~/.config/transcript-weaver/config.json.backup
+printf 'configuration check' | trwinp stdin > /tmp/transcript-weaver-packet.json
+```
+
+Alternatively, add the fields named by the validation error to your existing file. The
+program will never overwrite your real-vault settings.
 
 A coherent configuration looks like this:
 
@@ -91,21 +104,17 @@ A coherent configuration looks like this:
   "weave": {
     "transcript-cleanup": {
       "provider": "gemini",
-      "prompt": "Classify and clean the transcript, adding weave.type and weave.content."
-    },
-    "file-example": {
-      "provider": "gemini",
-      "prompt_file": "prompts/transcript-cleanup.md"
-    },
-    "cwd-example": {
-      "provider": "gemini",
-      "prompt_file": {"path": "prompts/local.md", "relative_to": "cwd"}
+      "prompt_file": "prompts/example.md"
     }
   },
   "out": {
-    "journals": {
+    "example-journals": {
       "timezone": "America/Los_Angeles",
-      "vault": "/path/to/vault",
+      "vault": {
+        "_comment": "Use relative_to cwd or config for relative paths; omit it for absolute or ~ paths.",
+        "path": "transcript-weaver-test-output",
+        "relative_to": "cwd"
+      },
       "packet_fields": {"category": "weave.type", "content": "weave.content"},
       "destinations": {
         "gratitude": {
@@ -128,9 +137,12 @@ A coherent configuration looks like this:
 Provider, weave, output, and destination names are matched case-insensitively.
 Names differing only by case are rejected.
 
-Plain relative configured paths are relative to `config.json`. Absolute paths
-and `~` are honored. The explicit object form above selects the current working
-directory. Destination paths may not escape the vault.
+Path objects use `path` plus `relative_to: "cwd"` or `relative_to: "config"` for
+relative paths. For an absolute path such as `/mnt/d/Notes` or a home-relative path
+such as `~/Obsidian/Notes`, omit `relative_to`. Existing path strings remain supported
+for compatibility. Keys beginning with `_comment` are embedded documentation and are
+ignored; other unexpected keys are rejected. Destination paths may not escape the
+vault.
 
 ## Weaving
 
@@ -186,7 +198,13 @@ The default suite is offline and uses fake providers and miniature temporary
 vaults. Live Otter and Gemini checks are opt-in. After all offline checks pass:
 
 ```bash
-TRANSCRIPT_WEAVER_LIVE_GEMINI=1 pytest -m live_gemini tests/test_live_gemini.py
+TRANSCRIPT_WEAVER_LIVE_GEMINI=1 pytest --no-cov -m live_gemini tests/test_live_gemini.py
+```
+
+The live Otter functional test uses the configured WSL/Windows Chrome session:
+
+```bash
+TRANSCRIPT_WEAVER_LIVE_OTTER=1 pytest --no-cov -m live_otter tests/test_live_otter.py
 ```
 
 That command reads `pass api/gemini` and sends only the harmless test transcript

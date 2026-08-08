@@ -13,10 +13,12 @@ import os
 import re
 import subprocess
 import time
+import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -107,6 +109,24 @@ def parse_otter_datetime(
     if zone is None:
         raise SourceUnavailableError("Could not determine the local system timezone.")
     normalized = re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+    relative_match = re.search(
+        r"\b(Today|Yesterday)\s+at\s+(\d{1,2}:\d{2}\s*[AP]M)\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if relative_match:
+        effective_now = (
+            local_now.astimezone(zone)
+            if local_now.tzinfo is not None
+            else local_now.replace(tzinfo=zone)
+        )
+        date_value = effective_now.date()
+        if relative_match.group(1).casefold() == "yesterday":
+            date_value -= timedelta(days=1)
+        relative_time = datetime.strptime(
+            relative_match.group(2).upper().replace(" ", ""), "%I:%M%p"
+        ).time()
+        return datetime.combine(date_value, relative_time, tzinfo=zone).astimezone(timezone.utc)
     patterns: tuple[tuple[str, tuple[str, ...], bool], ...] = (
         (
             r"([A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})\s*(?:,|at)?\s*"
@@ -155,6 +175,11 @@ def parse_otter_datetime(
     raise TranscriptNotFoundError("Could not identify the Otter recording date and time.")
 
 
+def _exception_summary(exc: Exception) -> str:
+    message = str(exc).splitlines()[0].strip()
+    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+
+
 class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live test
     """Live Otter browser client with shared, run-correlated diagnostics."""
 
@@ -175,6 +200,7 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
         self._warning = warning
         self._sleep = sleep
         self._cdp_url = os.environ.get("TRANSCRIPT_WEAVER_OTTER_CDP_URL")
+        self._started_chrome = False
 
     def capture_newest(self) -> OtterCapture:
         sync_api = _load_playwright()
@@ -187,8 +213,10 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
         _wait_for_cdp(cdp_url, sleep=self._sleep)
 
         try:
-            with sync_api.sync_playwright() as playwright:
-                browser = playwright.chromium.connect_over_cdp(cdp_url)
+            with (
+                sync_api.sync_playwright() as playwright,
+                self._managed_browser(playwright.chromium.connect_over_cdp(cdp_url)) as browser,
+            ):
                 if not browser.contexts:
                     raise SourceUnavailableError(
                         "Connected to Chrome but found no browser context."
@@ -227,13 +255,13 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
                 except Exception as exc:
                     self._capture_debug(page, "failure-page")
                     raise SourceUnavailableError(
-                        "Otter browser acquisition failed; no packet was emitted."
+                        f"Otter browser acquisition failed: {_exception_summary(exc)}"
                     ) from exc
         except (AuthenticationRequiredError, SourceUnavailableError, TranscriptNotFoundError):
             raise
         except Exception as exc:
             raise SourceUnavailableError(
-                "Otter browser acquisition failed; no packet was emitted."
+                f"Otter browser acquisition failed: {_exception_summary(exc)}"
             ) from exc
 
     def _capture_debug(self, page: Any, suffix: str) -> None:
@@ -296,7 +324,26 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
             raise SourceUnavailableError(
                 "Could not start Windows Chrome for Otter automation."
             ) from exc
+        self._started_chrome = True
         self._log.info("Started dedicated Otter Chrome profile")
+
+    @contextmanager
+    def _managed_browser(self, browser: Any) -> Iterator[Any]:
+        try:
+            yield browser
+        finally:
+            if self._started_chrome:
+                try:
+                    context = browser.contexts[0]
+                    page = context.pages[0]
+                    context.new_cdp_session(page).send("Browser.close")
+                    self._log.info("Closed dedicated Otter Chrome profile")
+                except Exception as exc:
+                    self._warning(
+                        f"could not close dedicated Otter Chrome: {_exception_summary(exc)}"
+                    )
+            with suppress(Exception):
+                browser.close()
 
     def _wait_for_ready(self, page: Any) -> None:
         page.goto(OTTER_URL, wait_until="domcontentloaded")
@@ -357,7 +404,7 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
                 if not href:
                     continue
                 title = link.inner_text(timeout=1000).strip() or None
-                page.goto(href, wait_until="domcontentloaded")
+                page.goto(urllib.parse.urljoin(str(page.url), href), wait_until="domcontentloaded")
                 try:
                     page.wait_for_load_state("networkidle", timeout=30000)
                 except Exception:
@@ -376,8 +423,23 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
         tab = page.locator('[data-testid="tab-Transcript"]').first
         if tab.count() and tab.is_visible(timeout=3000):
             tab.click()
-        menu = page.locator('[data-testid="more-options-button"]').first
-        if not menu.count() or not menu.is_visible(timeout=3000):
+        menu_candidates = (
+            page.locator('[data-testid="transcript-more-options-button"]').first,
+            page.locator('[data-testid="more-options-button"]').first,
+            page.locator('[data-testid="block-menu-more-options"]').first,
+            page.get_by_role(
+                "button", name=re.compile(r"more options|more|menu", re.IGNORECASE)
+            ).first,
+        )
+        menu = next(
+            (
+                candidate
+                for candidate in menu_candidates
+                if candidate.count() and candidate.is_visible(timeout=3000)
+            ),
+            None,
+        )
+        if menu is None:
             raise SourceUnavailableError("Could not open Otter's More Options menu.")
         menu.click()
         command = page.get_by_text(re.compile(r"copy transcript", re.IGNORECASE)).first

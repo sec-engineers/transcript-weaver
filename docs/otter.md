@@ -53,6 +53,17 @@ Transcript Weaver rather than looking for an optional Otter extra.
 The adapter never reads an Otter password, calls Gemini, writes a vault, or deletes a
 recording.
 
+## Live functional test
+
+After the offline suite passes, verify the configured browser connection with:
+
+```bash
+TRANSCRIPT_WEAVER_LIVE_OTTER=1 pytest --no-cov -m live_otter tests/test_live_otter.py
+```
+
+This opens the newest visible recording and copies its transcript into a temporary test
+packet. It does not call Gemini, write a vault, or delete the recording.
+
 ## Diagnostics
 
 Ordinary successful acquisition is silent except for its JSON packet on stdout.

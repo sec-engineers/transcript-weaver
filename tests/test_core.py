@@ -408,3 +408,104 @@ def test_missing_playwright_is_actionable_and_traceback_free(
     assert stdout.getvalue() == ""
     assert "Reinstall or upgrade transcript-weaver" in stderr.getvalue()
     assert "Traceback" not in stderr.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("shown", "expected"),
+    [
+        ("Today at 5:34 am", datetime(2026, 8, 8, 12, 34, tzinfo=timezone.utc)),
+        ("Yesterday at 11:45 PM", datetime(2026, 8, 8, 6, 45, tzinfo=timezone.utc)),
+    ],
+)
+def test_otter_relative_datetime_formats(shown: str, expected: datetime) -> None:
+    pacific = timezone(timedelta(hours=-7))
+    now = datetime(2026, 8, 8, 18, 0, tzinfo=pacific)
+    assert parse_otter_datetime(shown, now=now, local_timezone=pacific) == expected
+
+
+def test_otter_closes_only_a_browser_it_started() -> None:
+    from transcript_weaver.inp.otter import PlaywrightOtterClient
+
+    class Session:
+        commands: list[str] = []
+
+        def send(self, command: str) -> None:
+            self.commands.append(command)
+
+    class Context:
+        pages = [object()]
+        session = Session()
+
+        def new_cdp_session(self, page: object) -> Session:
+            assert page is self.pages[0]
+            return self.session
+
+    class Browser:
+        contexts = [Context()]
+        disconnected = False
+
+        def close(self) -> None:
+            self.disconnected = True
+
+    class Log:
+        def info(self, message: str) -> None:
+            assert message == "Closed dedicated Otter Chrome profile"
+
+    client = object.__new__(PlaywrightOtterClient)
+    client._started_chrome = True
+    client._log = Log()
+    client._warning = lambda message: pytest.fail(message)
+    browser = Browser()
+    with client._managed_browser(browser):
+        pass
+    assert browser.contexts[0].session.commands == ["Browser.close"]
+    assert browser.disconnected
+
+    client._started_chrome = False
+    browser = Browser()
+    with client._managed_browser(browser):
+        pass
+    assert browser.contexts[0].session.commands == ["Browser.close"]
+    assert browser.disconnected
+
+
+def test_otter_recording_navigation_resolves_relative_href() -> None:
+    from transcript_weaver.inp.otter import PlaywrightOtterClient
+
+    class Link:
+        def is_visible(self, *, timeout: int) -> bool:
+            return True
+
+        def get_attribute(self, name: str) -> str:
+            assert name == "href"
+            return "/u/recording-id"
+
+        def inner_text(self, *, timeout: int) -> str:
+            return "Recording"
+
+    class Links:
+        def count(self) -> int:
+            return 1
+
+        def nth(self, index: int) -> Link:
+            assert index == 0
+            return Link()
+
+    class Page:
+        url = "https://otter.ai/home"
+        visited: str | None = None
+
+        def locator(self, selector: str) -> Links:
+            return Links()
+
+        def goto(self, url: str, *, wait_until: str) -> None:
+            self.visited = url
+            self.url = url
+
+        def wait_for_load_state(self, state: str, *, timeout: int) -> None:
+            return None
+
+    client = object.__new__(PlaywrightOtterClient)
+    page = Page()
+    assert client._open_newest(page) == ("Recording", "https://otter.ai/u/recording-id")
+    assert page.visited == "https://otter.ai/u/recording-id"

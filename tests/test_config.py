@@ -10,6 +10,7 @@ from transcript_weaver.config import (
     get_application_paths,
     load_or_create_config,
     packaged_default_config_bytes,
+    packaged_example_prompt_bytes,
     validate_config,
 )
 
@@ -144,3 +145,118 @@ def test_windows_roaming_config_and_local_logs(monkeypatch) -> None:
     assert str(paths.log_directory).replace("\\", "/") == (
         "C:/Users/example/AppData/Local/Transcript Weaver/Logs"
     )
+
+
+def test_first_run_provisions_example_prompt_and_sanitizes_comments(
+    app_paths: ApplicationPaths,
+) -> None:
+    config = load_or_create_config(app_paths)
+    prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
+    assert prompt_path.read_bytes() == packaged_example_prompt_bytes()
+    assert "dream|gratitude|dss|sacred|unknown" in prompt_path.read_text()
+    vault = config.out["example-journals"]["vault"]
+    assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
+    stored = json.loads(app_paths.config_file.read_text())
+    assert stored["out"]["example-journals"]["vault"]["_comment"]
+
+
+def test_first_run_never_overwrites_existing_example_prompt(
+    app_paths: ApplicationPaths,
+) -> None:
+    prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
+    prompt_path.parent.mkdir(parents=True)
+    prompt_path.write_text("my customized prompt")
+    load_or_create_config(app_paths)
+    assert prompt_path.read_text() == "my customized prompt"
+
+
+def test_top_level_configuration_error_lists_missing_and_unrecognized_fields(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "config.json"
+    value = {
+        "schema_version": 1,
+        "logging": {"retained_runs": 5},
+        "obsolete": {},
+    }
+    with pytest.raises(ConfigurationError) as caught:
+        validate_config(value, path=path)
+    message = str(caught.value)
+    assert str(path) in message
+    assert "missing required fields: out, providers, weave" in message
+    assert "unrecognized fields: obsolete" in message
+    assert "Expected fields: logging, out, providers, schema_version, weave" in message
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (
+            lambda value: value["providers"]["gemini"].update({"unexpected": True}),
+            "providers.gemini has unrecognized fields: unexpected",
+        ),
+        (
+            lambda value: value["weave"]["transcript-cleanup"].pop("prompt_file"),
+            "weave.transcript-cleanup must contain exactly one of prompt or prompt_file",
+        ),
+        (
+            lambda value: value["out"]["example-journals"]["packet_fields"].pop("content"),
+            "packet_fields has missing required fields: content",
+        ),
+        (
+            lambda value: value["out"]["example-journals"]["vault"].update(
+                {"relative_to": "elsewhere"}
+            ),
+            "vault.relative_to must be 'cwd' or 'config'",
+        ),
+    ],
+)
+def test_nested_configuration_errors_name_exact_field(
+    tmp_path: Path, mutate, expected: str
+) -> None:
+    value = json.loads(packaged_default_config_bytes())
+    mutate(value)
+    with pytest.raises(ConfigurationError, match=expected):
+        validate_config(value, path=tmp_path / "config.json")
+
+
+def test_vault_path_object_accepts_cwd_config_absolute_and_home(tmp_path: Path) -> None:
+    for vault in (
+        {"path": "test-output", "relative_to": "cwd"},
+        {"path": "test-output", "relative_to": "config"},
+        {"path": "/absolute/test-output"},
+        {"path": "~/test-output"},
+    ):
+        value = json.loads(packaged_default_config_bytes())
+        value["out"]["example-journals"]["vault"] = vault
+        assert validate_config(value, path=tmp_path / "config.json")
+
+
+def test_absolute_vault_rejects_relative_to(tmp_path: Path) -> None:
+    value = json.loads(packaged_default_config_bytes())
+    value["out"]["example-journals"]["vault"] = {
+        "path": "/absolute/test-output",
+        "relative_to": "cwd",
+    }
+    with pytest.raises(ConfigurationError, match="must be omitted"):
+        validate_config(value, path=tmp_path / "config.json")
+
+
+def test_existing_default_config_recreates_only_missing_referenced_prompt(
+    app_paths: ApplicationPaths,
+) -> None:
+    app_paths.config_file.parent.mkdir(parents=True)
+    app_paths.config_file.write_bytes(packaged_default_config_bytes())
+    prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
+    load_or_create_config(app_paths)
+    assert prompt_path.read_bytes() == packaged_example_prompt_bytes()
+    prompt_path.write_text("custom")
+    load_or_create_config(app_paths)
+    assert prompt_path.read_text() == "custom"
+
+
+def test_weave_profile_rejects_unknown_provider(tmp_path: Path) -> None:
+    value = json.loads(packaged_default_config_bytes())
+    value["weave"]["transcript-cleanup"]["provider"] = "missing-provider"
+    with pytest.raises(ConfigurationError, match="Available providers: gemini"):
+        validate_config(value, path=tmp_path / "config.json")

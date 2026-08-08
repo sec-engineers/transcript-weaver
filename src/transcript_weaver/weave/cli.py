@@ -15,6 +15,7 @@ from transcript_weaver.config import (
     get_application_paths,
     load_or_create_config,
 )
+from transcript_weaver.profiles import available_profiles
 from transcript_weaver.runtime import RunIdError, ensure_packet_run_id
 from transcript_weaver.weave.core import WeaveError, transform
 from transcript_weaver.weave.provider import Provider
@@ -25,7 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="trweave",
         description="Enrich a transcript packet with a configured transformation prompt.",
     )
-    parser.add_argument("prompt_or_profile")
+    parser.add_argument(
+        "prompt_or_profile", nargs="?", help="prompt file or configured weave profile"
+    )
     add_logging_arguments(parser)
     return parser
 
@@ -54,6 +57,11 @@ def run(
     try:
         effective_paths = paths or get_application_paths()
         config = load_or_create_config(effective_paths)
+        if args.prompt_or_profile is None:
+            raise ConfigurationError(
+                "No weave profile or prompt file was provided. "
+                f"Available profiles: {available_profiles(config.weave)}."
+            )
         packet = _read_packet(stdin)
         run_id = ensure_packet_run_id(packet)
         invocation = start_invocation(

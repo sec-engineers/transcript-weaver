@@ -15,17 +15,23 @@
   "weave": {
     "transcript-cleanup": {
       "provider": "gemini",
-      "prompt": "Classify the transcript as exactly one of gratitude, dream, dss, sacred, or unknown. Add weave.type with that category and weave.content with cleaned Markdown. Preserve meaning and detail, remove transcription clutter, and do not invent facts. Gratitude content must be a Markdown bullet list. Unknown content should remain substantially verbatim except for obvious dictation noise."
-    },
-    "prompt-file-example": {
-      "provider": "gemini",
-      "prompt_file": "prompts/transcript-cleanup.md"
+      "prompt_file": "prompts/example.md"
     }
   },
   "out": {
     "example-journals": {
       "timezone": "America/Los_Angeles",
-      "vault": "example-vault",
+      "vault": {
+        "_comment": "For a relative path, use relative_to 'cwd' or 'config'. For an absolute path or a path beginning with '~', omit relative_to.",
+        "_comment_examples": [
+          "CWD-relative: {\"path\": \"transcript-weaver-test-output\", \"relative_to\": \"cwd\"}",
+          "Config-relative: {\"path\": \"transcript-weaver-test-output\", \"relative_to\": \"config\"}",
+          "Absolute: {\"path\": \"/absolute/path/to/your/Obsidian/Vault\"}",
+          "Home-relative: {\"path\": \"~/Obsidian/My Vault\"}"
+        ],
+        "path": "transcript-weaver-test-output",
+        "relative_to": "cwd"
+      },
       "packet_fields": {
         "category": "weave.type",
         "content": "weave.content"

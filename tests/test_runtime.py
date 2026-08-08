@@ -180,5 +180,21 @@ def test_disabled_logger_creates_no_directory(tmp_path: Path) -> None:
         log_directory=directory,
     )
     stage_log.info("discarded")
+    stage_log.exception("ExpectedError")
     stage_log.close()
     assert not directory.exists()
+
+
+def test_disabled_logger_does_not_emit_fallback_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stage_log = StageLog(
+        run_id=RUN3,
+        stage="trweave",
+        options=LoggingOptions(),
+        log_directory=tmp_path,
+    )
+    stage_log.exception("WeaveError")
+    stage_log.close()
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
