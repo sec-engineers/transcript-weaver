@@ -1,4 +1,4 @@
-"""Per-user configuration loading and platform-specific application paths."""
+"""Per-user configuration loading and validation."""
 
 from __future__ import annotations
 
@@ -30,6 +30,9 @@ class LoggingConfig:
 class AppConfig:
     schema_version: int
     logging: LoggingConfig
+    providers: dict[str, dict[str, Any]]
+    weave: dict[str, dict[str, Any]]
+    out: dict[str, dict[str, Any]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,72 +42,83 @@ class ApplicationPaths:
 
 
 def get_application_paths(
-    config_dirs: PlatformDirs | None = None,
-    log_dirs: PlatformDirs | None = None,
+    config_dirs: PlatformDirs | None = None, log_dirs: PlatformDirs | None = None
 ) -> ApplicationPaths:
-    """Return conventional config and log paths without creating either."""
     if config_dirs is None or log_dirs is None:
-        system = platform.system()
-        app_name = "transcript-weaver" if system == "Linux" else "Transcript Weaver"
+        app_name = "transcript-weaver" if platform.system() == "Linux" else "Transcript Weaver"
         config_dirs = config_dirs or PlatformDirs(appname=app_name, appauthor=False, roaming=True)
         log_dirs = log_dirs or PlatformDirs(appname=app_name, appauthor=False, roaming=False)
     return ApplicationPaths(
-        config_file=Path(config_dirs.user_config_path) / "config.json",
-        log_directory=Path(log_dirs.user_log_path),
+        Path(config_dirs.user_config_path) / "config.json", Path(log_dirs.user_log_path)
     )
 
 
 def packaged_default_config_bytes() -> bytes:
-    resource = resources.files("transcript_weaver.resources").joinpath("default-config.json")
-    return resource.read_bytes()
+    return (
+        resources.files("transcript_weaver.resources").joinpath("default-config.json").read_bytes()
+    )
+
+
+def _profiles(value: Any, name: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        raise ConfigurationError(f"Configuration {name} section must be an object.")
+    result: dict[str, dict[str, Any]] = {}
+    seen: dict[str, str] = {}
+    for key, profile in value.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(profile, dict):
+            raise ConfigurationError(f"Configuration {name} profiles must be named objects.")
+        folded = key.casefold()
+        if folded in seen:
+            raise ConfigurationError(
+                f"Configuration {name} profile names {seen[folded]!r} and {key!r} "
+                "differ only by case."
+            )
+        seen[folded] = key
+        result[key] = profile
+    return result
 
 
 def validate_config(value: Any, *, path: Path) -> AppConfig:
     if not isinstance(value, dict):
         raise ConfigurationError(f"Configuration must be a JSON object: {path}")
-    allowed_top = {"schema_version", "logging"}
-    if set(value) != allowed_top:
+    allowed = {"schema_version", "logging", "providers", "weave", "out"}
+    if set(value) != allowed:
         raise ConfigurationError(f"Configuration has unrecognized or missing fields: {path}")
-    if value.get("schema_version") != CONFIG_SCHEMA_VERSION or isinstance(
-        value.get("schema_version"), bool
-    ):
+    if value.get("schema_version") != 1 or isinstance(value.get("schema_version"), bool):
         raise ConfigurationError(f"Unsupported configuration schema_version: {path}")
     logging_value = value.get("logging")
     if not isinstance(logging_value, dict) or set(logging_value) != {"retained_runs"}:
         raise ConfigurationError(f"Configuration logging section is invalid: {path}")
-    retained_runs = logging_value.get("retained_runs")
-    if not isinstance(retained_runs, int) or isinstance(retained_runs, bool) or retained_runs < 0:
+    retained = logging_value.get("retained_runs")
+    if not isinstance(retained, int) or isinstance(retained, bool) or retained < 0:
         raise ConfigurationError(
             f"Configuration logging.retained_runs must be a nonnegative integer: {path}"
         )
-    return AppConfig(
-        schema_version=CONFIG_SCHEMA_VERSION,
-        logging=LoggingConfig(retained_runs=retained_runs),
-    )
+    providers = _profiles(value.get("providers"), "providers")
+    weave = _profiles(value.get("weave"), "weave")
+    out = _profiles(value.get("out"), "out")
+    return AppConfig(1, LoggingConfig(retained), providers, weave, out)
 
 
 def load_or_create_config(paths: ApplicationPaths) -> AppConfig:
-    """Atomically create the user copy once, then validate without rewriting it."""
     config_path = paths.config_file
     if not config_path.exists():
         config_path.parent.mkdir(parents=True, exist_ok=True)
         _create_from_packaged_default(config_path)
     try:
-        raw = config_path.read_text(encoding="utf-8")
-        value = json.loads(raw)
+        return validate_config(
+            json.loads(config_path.read_text(encoding="utf-8")), path=config_path
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Could not read valid JSON configuration: {config_path}") from exc
-    return validate_config(value, path=config_path)
 
 
 def _create_from_packaged_default(config_path: Path) -> None:
     data = packaged_default_config_bytes()
-    # Validate the packaged template before copying it into a user's directory.
     try:
         validate_config(json.loads(data.decode("utf-8")), path=config_path)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError("Packaged default configuration is invalid.") from exc
-
     temporary = config_path.parent / f".{config_path.name}.{uuid.uuid4().hex}.tmp"
     try:
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -115,12 +129,9 @@ def _create_from_packaged_default(config_path: Path) -> None:
         try:
             os.link(temporary, config_path)
         except FileExistsError:
-            # Another command won the first-run race; its complete file is authoritative.
             pass
         except OSError as exc:
-            if config_path.exists():
-                pass
-            else:
+            if not config_path.exists():
                 raise ConfigurationError(
                     f"Could not create configuration atomically: {config_path}"
                 ) from exc

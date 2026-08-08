@@ -21,10 +21,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = ["platformdirs>=4.0,<5"]
+dependencies = ["platformdirs>=4.0,<5", "playwright>=1.45,<2"]
 
 [project.optional-dependencies]
-otter = ["playwright>=1.45,<2"]
 dev = [
   "build>=1.2",
   "mypy>=1.10",
@@ -35,7 +34,7 @@ dev = [
 
 [project.scripts]
 trwinp = "transcript_weaver.inp.cli:main"
-trwclean = "transcript_weaver.clean.cli:main"
+trweave = "transcript_weaver.weave.cli:main"
 trwout = "transcript_weaver.out.cli:main"
 
 [tool.hatch.build.targets.wheel]

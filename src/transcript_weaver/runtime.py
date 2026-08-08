@@ -16,7 +16,7 @@ RUN_ID_PATTERN = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
 ARTIFACT_SUFFIX_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DIAGNOSTIC_FILE_PATTERN = re.compile(
     r"^(?P<run>\d{8}-\d{6}-[0-9a-f]{4})-"
-    r"(?P<stage>trwinp|trwclean|trwout)(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
+    r"(?P<stage>trwinp|trweave|trwout)(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
     r"(?P<extension>\.log|\.html|\.png)$"
 )
 SUPPORTED_EXTENSIONS = {".log", ".html", ".png"}
@@ -145,7 +145,7 @@ def build_diagnostic_path(
     suffix: str | None = None,
 ) -> Path:
     validate_run_id(run_id)
-    if stage not in {"trwinp", "trwclean", "trwout"}:
+    if stage not in {"trwinp", "trweave", "trwout"}:
         raise DiagnosticError("Invalid pipeline stage for diagnostic filename.")
     if extension not in SUPPORTED_EXTENSIONS:
         raise DiagnosticError("Unsupported diagnostic artifact extension.")

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from transcript_weaver.clean import cli as clean_cli
 from transcript_weaver.config import ApplicationPaths
 from transcript_weaver.inp import cli
 from transcript_weaver.inp.errors import ExitStatus, SourceUnavailableError, TranscriptNotFoundError
@@ -15,6 +14,7 @@ from transcript_weaver.inp.otter import OtterCapture, OtterSource, parse_otter_d
 from transcript_weaver.inp.sources import FileSource, StdinSource
 from transcript_weaver.models import AcquiredTranscript, ModelError, Source, TranscriptPacket
 from transcript_weaver.out import cli as out_cli
+from transcript_weaver.weave import cli as weave_cli
 
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
 
@@ -181,28 +181,28 @@ def test_invalid_config_blocks_json_without_overwrite(app_paths: ApplicationPath
     assert app_paths.config_file.read_text() == "{bad"
 
 
-@pytest.mark.parametrize("stage", ["trwinp", "trwclean", "trwout"])
+@pytest.mark.parametrize("stage", ["trwinp", "trweave", "trwout"])
 def test_any_command_can_create_first_run_config(tmp_path: Path, stage: str) -> None:
     paths = ApplicationPaths(tmp_path / stage / "config.json", tmp_path / stage / "log")
     if stage == "trwinp":
         cli.run(["stdin"], stdin=io.StringIO("data"), paths=paths)
-    elif stage == "trwclean":
-        clean_cli.run([], stdin=io.StringIO(""), paths=paths)
+    elif stage == "trweave":
+        weave_cli.run(["missing"], stdin=io.StringIO(""), paths=paths)
     else:
-        out_cli.run([], stdin=io.StringIO(""), paths=paths)
+        out_cli.run(["missing"], stdin=io.StringIO(""), paths=paths)
     assert paths.config_file.exists()
 
 
 def test_downstream_placeholders_preserve_or_generate_run_for_logging(
     tmp_path: Path,
 ) -> None:
-    for module, stage in ((clean_cli, "trwclean"), (out_cli, "trwout")):
+    for module, stage in ((weave_cli, "trweave"), (out_cli, "trwout")):
         paths = ApplicationPaths(tmp_path / stage / "config.json", tmp_path / stage / "log")
         packet = {"schema_version": 1, "run": {"id": "20260728-120000-a1b2"}}
         stdout, stderr = io.StringIO(), io.StringIO()
         assert (
             module.run(
-                ["--log"],
+                ["missing", "--log"],
                 stdin=io.StringIO(json.dumps(packet)),
                 stdout=stdout,
                 stderr=stderr,
@@ -218,7 +218,7 @@ def test_downstream_placeholders_preserve_or_generate_run_for_logging(
             tmp_path / f"{stage}-legacy" / "log",
         )
         module.run(
-            ["--log"],
+            ["missing", "--log"],
             stdin=io.StringIO(json.dumps({"schema_version": 1})),
             paths=generated_paths,
         )
@@ -229,7 +229,15 @@ def test_downstream_placeholders_preserve_or_generate_run_for_logging(
 def test_ordinary_invocation_applies_zero_retention(app_paths: ApplicationPaths) -> None:
     app_paths.config_file.parent.mkdir(parents=True)
     app_paths.config_file.write_text(
-        json.dumps({"schema_version": 1, "logging": {"retained_runs": 0}})
+        json.dumps(
+            {
+                "schema_version": 1,
+                "logging": {"retained_runs": 0},
+                "providers": {},
+                "weave": {},
+                "out": {},
+            }
+        )
     )
     app_paths.log_directory.mkdir(parents=True)
     old = app_paths.log_directory / "20200101-000000-a1b2-trwinp.log"
@@ -315,14 +323,16 @@ def test_file_cli_success_and_mocked_otter_branch(
     assert stderr.getvalue() == ""
 
 
-@pytest.mark.parametrize("module", [clean_cli, out_cli])
+@pytest.mark.parametrize("module", [weave_cli, out_cli])
 def test_downstream_rejects_invalid_json_and_unsafe_run(
     module, app_paths: ApplicationPaths
 ) -> None:
     for text in ("{broken", json.dumps({"run": {"id": "../escape"}}), "[]"):
         stdout, stderr = io.StringIO(), io.StringIO()
         assert (
-            module.run([], stdin=io.StringIO(text), stdout=stdout, stderr=stderr, paths=app_paths)
+            module.run(
+                ["missing"], stdin=io.StringIO(text), stdout=stdout, stderr=stderr, paths=app_paths
+            )
             == 1
         )
         assert stdout.getvalue() == ""
@@ -357,3 +367,44 @@ def test_repeated_in_process_logging_does_not_duplicate_handlers(
         content = path.read_text()
         assert content.count("Stage started") == 1
         assert content.count("Stage completed successfully") == 1
+
+
+def test_trwinp_help_discovers_all_input_methods() -> None:
+    help_text = cli.build_parser().format_help()
+    assert "stdin" in help_text
+    assert "read UTF-8 transcript text from standard input" in help_text
+    assert "file" in help_text
+    assert "read a UTF-8 text file" in help_text
+    assert "otter" in help_text
+    assert "acquire the newest visible Otter recording" in help_text
+
+
+def test_missing_playwright_is_actionable_and_traceback_free(
+    app_paths: ApplicationPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from transcript_weaver.inp import otter
+
+    original_import_module = otter.importlib.import_module
+
+    def missing_module(name: str) -> object:
+        if name == "playwright.sync_api":
+            raise ModuleNotFoundError(name)
+        return original_import_module(name)
+
+    monkeypatch.setattr(otter.importlib, "import_module", missing_module)
+    with pytest.raises(SourceUnavailableError, match="Reinstall or upgrade transcript-weaver"):
+        otter._load_playwright()
+
+    class MissingPlaywrightSource:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def acquire(self) -> AcquiredTranscript:
+            return otter._load_playwright()
+
+    monkeypatch.setattr(cli, "OtterSource", MissingPlaywrightSource)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    assert cli.run(["otter"], stdout=stdout, stderr=stderr, paths=app_paths) != 0
+    assert stdout.getvalue() == ""
+    assert "Reinstall or upgrade transcript-weaver" in stderr.getvalue()
+    assert "Traceback" not in stderr.getvalue()

@@ -154,7 +154,7 @@ def test_byte_artifact_and_invalid_stage_extension(tmp_path: Path) -> None:
 def test_verbose_logger_supports_debug_warning_and_traceback(tmp_path: Path) -> None:
     stage_log = StageLog(
         run_id=RUN2,
-        stage="trwclean",
+        stage="trweave",
         options=LoggingOptions(verbose=True),
         log_directory=tmp_path,
     )

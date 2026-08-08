@@ -2,5 +2,62 @@
   "schema_version": 1,
   "logging": {
     "retained_runs": 5
+  },
+  "providers": {
+    "gemini": {
+      "model": "gemini-2.5-flash-lite",
+      "credential": {
+        "source": "pass",
+        "name": "api/gemini"
+      }
+    }
+  },
+  "weave": {
+    "transcript-cleanup": {
+      "provider": "gemini",
+      "prompt": "Classify the transcript as exactly one of gratitude, dream, dss, sacred, or unknown. Add weave.type with that category and weave.content with cleaned Markdown. Preserve meaning and detail, remove transcription clutter, and do not invent facts. Gratitude content must be a Markdown bullet list. Unknown content should remain substantially verbatim except for obvious dictation noise."
+    },
+    "prompt-file-example": {
+      "provider": "gemini",
+      "prompt_file": "prompts/transcript-cleanup.md"
+    }
+  },
+  "out": {
+    "example-journals": {
+      "timezone": "America/Los_Angeles",
+      "vault": "example-vault",
+      "packet_fields": {
+        "category": "weave.type",
+        "content": "weave.content"
+      },
+      "destinations": {
+        "gratitude": {
+          "operation": "insert",
+          "file": "Gratitude Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "dream": {
+          "operation": "insert",
+          "file": "Dream Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "dss": {
+          "operation": "insert",
+          "file": "DSS Chronicles.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "sacred": {
+          "operation": "insert",
+          "file": "Sacred Journey Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "unknown": {
+          "operation": "create",
+          "directory": "00 Inbox",
+          "filename": "{date}-{time}-unknown.md",
+          "format": "{content}\n"
+        }
+      }
+    }
   }
 }

@@ -1,39 +1,34 @@
 # Pipeline contracts
 
-## Schema version 1
+## `trwinp`
 
-A `trwinp` packet has these required top-level fields: integer `schema_version`
-(currently `1`), `run`, UTC `datetime` in `YYYY-MM-DDTHH:MM:SSZ`, `source`, nonempty
-original `transcript`, and reserved object `metadata`. `source.type` is required;
-`source.name` and opaque `source.reference` are optional.
+Reads a configured source and emits one schema-v1 packet. `datetime` is recording
+time in canonical UTC; `run.id` is correlation identity, not recording time.
 
-`run.id` has the filename-safe form `YYYYMMDD-HHMMSS-xxxx`, where the timestamp is UTC
-and `xxxx` is random hexadecimal collision protection. It correlates pipeline stages
-and diagnostics; it is not the transcript's recording time. Every command preserves a
-valid incoming ID, generates one for a legacy or manually created packet when absent,
-and rejects malformed values. Consumers must reject unsupported schema versions rather
-than guessing.
+## `trweave PROMPT_OR_PROFILE`
 
-## Future `trwclean`
+Reads exactly one JSON object and emits exactly one enriched JSON object. Direct
+prompt paths use Gemini; profiles name both provider and either inline `prompt`
+or `prompt_file`. The model must preserve every original value and add a usable
+`weave` object containing nonempty `type` and `content` strings. Validation is
+strict and provider output is never silently repaired.
 
-`trwclean MASTER_PROMPT_FILE` will read one complete packet from stdin and a prompt
-from the named UTF-8 file. A Gemini provider will receive both. The command must
-validate that every input field, including `run`, is present and unchanged and that the
-response adds a usable `clean` object with prompt-defined `type` and transformed
-`content`. Categories will not be hard-coded. Success emits only the complete enriched
-JSON packet.
+## `trwout OUTPUT_PROFILE`
 
-The current placeholder may inspect an incoming packet only to preserve or create its
-run ID for requested logging. It emits no success packet and does not claim cleaning is
-implemented.
+Reads one enriched object, extracts category/content via dotted paths, converts
+UTC recording time to the configured IANA timezone, renders documented
+placeholders, and performs one safe operation. `insert` is ascending by local
+calendar date. Same-date entries are both retained, with the newer arrival after
+existing same-date entries and a warning on stderr. `append` and non-overwriting
+`create` are deterministic. Existing-file changes use atomic replacement.
 
-## Future `trwout`
+`weave.type` selects the case-insensitive destination key. `weave.content` is
+rendered into that destination's `format`. Neither output routing nor
+classification is hard-coded into the commands.
 
-`trwout OUTPUT_RULES.json` will read an enriched packet, preserve `run`, match
-`clean.type`, and invoke a deterministic Python writer described by—not implemented
-inside—the rules file. Likely writers are create-file, append, and chronological
-insertion. Tests will use a disposable miniature vault. Existing-file writes must be
-atomic. Source deletion is separate and may run only after persistence is verified.
+## Process channels and diagnostics
 
-The current placeholder may inspect an incoming packet only for run correlation. It
-performs no output persistence.
+Packet-producing success writes one JSON object to stdout. Failure writes no
+partial JSON. `trwout` success has no stdout. Errors and warnings go to stderr.
+Persistent logs are opt-in and must exclude packet text, prompts, response
+content, secrets, and journal contents.

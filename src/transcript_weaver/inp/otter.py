@@ -401,7 +401,8 @@ def _load_playwright() -> Any:  # pragma: no cover - live dependency boundary
         return importlib.import_module("playwright.sync_api")
     except ImportError as exc:
         raise SourceUnavailableError(
-            "Otter support requires: pip install 'transcript-weaver[otter]'"
+            "Playwright is unavailable. Reinstall or upgrade transcript-weaver to repair "
+            "the installation."
         ) from exc
 
 

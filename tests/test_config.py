@@ -13,10 +13,10 @@ from transcript_weaver.config import (
     validate_config,
 )
 
-EXPECTED = {"schema_version": 1, "logging": {"retained_runs": 5}}
+EXPECTED = json.loads(packaged_default_config_bytes())
 
 
-def test_packaged_default_has_only_intended_fields() -> None:
+def test_packaged_default_has_intended_sections() -> None:
     assert json.loads(packaged_default_config_bytes()) == EXPECTED
 
 
@@ -30,7 +30,13 @@ def test_first_run_creates_owned_config_atomically(app_paths: ApplicationPaths) 
 
 def test_existing_config_is_never_overwritten(app_paths: ApplicationPaths) -> None:
     app_paths.config_file.parent.mkdir(parents=True)
-    custom = {"schema_version": 1, "logging": {"retained_runs": 1000}}
+    custom = {
+        "schema_version": 1,
+        "logging": {"retained_runs": 1000},
+        "providers": {},
+        "weave": {},
+        "out": {},
+    }
     original = json.dumps(custom, indent=2)
     app_paths.config_file.write_text(original)
     assert load_or_create_config(app_paths).logging.retained_runs == 1000

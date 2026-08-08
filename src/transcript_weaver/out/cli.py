@@ -1,4 +1,4 @@
-"""Safe placeholder for ``trwout`` with shared startup diagnostics."""
+"""Command-line deterministic output stage."""
 
 from __future__ import annotations
 
@@ -15,28 +15,23 @@ from transcript_weaver.config import (
     get_application_paths,
     load_or_create_config,
 )
+from transcript_weaver.out.core import OutputError, persist
 from transcript_weaver.runtime import RunIdError, ensure_packet_run_id
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="trwout",
-        description="Future deterministic output stage (not implemented yet).",
+        prog="trwout", description="Persist an enriched packet using a configured output profile."
     )
-    parser.add_argument("output_rules_file", nargs="?")
+    parser.add_argument("output_profile")
     add_logging_arguments(parser)
     return parser
 
 
-def _read_optional_packet(stdin: TextIO) -> dict[str, Any]:
-    try:
-        if stdin.isatty():
-            return {}
-    except (AttributeError, OSError):
-        return {}
+def _read_packet(stdin: TextIO) -> dict[str, Any]:
     text = stdin.read()
     if not text.strip():
-        return {}
+        raise ValueError("Standard input did not contain a JSON packet.")
     value = json.loads(text)
     if not isinstance(value, dict):
         raise ValueError("Input packet must be a JSON object.")
@@ -57,7 +52,7 @@ def run(
     try:
         effective_paths = paths or get_application_paths()
         config = load_or_create_config(effective_paths)
-        packet = _read_optional_packet(stdin)
+        packet = _read_packet(stdin)
         run_id = ensure_packet_run_id(packet)
         invocation = start_invocation(
             stage="trwout",
@@ -67,11 +62,16 @@ def run(
             paths=effective_paths,
             config=config,
         )
-        invocation.log.info("Placeholder invoked; no packet was emitted")
-        print("trwout: not implemented in milestone 1.", file=stderr)
-        invocation.close(success=False)
-        return 1
-    except (ConfigurationError, RunIdError, ValueError, json.JSONDecodeError) as exc:
+        operation, target = persist(
+            packet, args.output_profile, config, effective_paths, warn=invocation.warning
+        )
+        invocation.log.info(
+            f"Output completed profile={args.output_profile!r} operation={operation} "
+            f"destination={target.name!r}"
+        )
+        invocation.close(success=True)
+        return 0
+    except (ConfigurationError, RunIdError, ValueError, json.JSONDecodeError, OutputError) as exc:
         if invocation is not None:
             invocation.log.exception(type(exc).__name__)
             invocation.close(success=False)
