@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Renamed the packaged output profile to `franks-example`, reorganized and
+  wrapped configuration comments for terminal editors, improved malformed input
+  guidance, and added Markdown-aware 72-column output wrapping.
 - Consolidated cleaned text in `weave.update_transcript`, removing duplicate
   `weave.content` and top-level `updated_transcript` output while keeping the source
   `transcript` immutable.

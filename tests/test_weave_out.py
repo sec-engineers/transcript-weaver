@@ -14,7 +14,7 @@ from transcript_weaver.config import (
     validate_config,
 )
 from transcript_weaver.out import cli as out_cli
-from transcript_weaver.out.core import insert_chronologically, persist
+from transcript_weaver.out.core import insert_chronologically, persist, soft_wrap_markdown
 from transcript_weaver.profiles import extract_dotted, find_profile, resolve_configured_path
 from transcript_weaver.weave import cli as weave_cli
 from transcript_weaver.weave.core import WeaveError, resolve_prompt, validate_response
@@ -377,6 +377,55 @@ def test_insert_order_and_duplicate_warning(tmp_path: Path) -> None:
     ) < updated.index("later")
 
 
+def test_markdown_soft_wrap_preserves_structure_and_long_tokens() -> None:
+    long_prose = "This is editable prose " * 8
+    long_bullet = "- " + ("a readable gratitude item " * 6)
+    url = "https://example.com/" + ("unbreakable" * 8)
+    fence = chr(96) * 3
+    fenced = fence + "text\n" + (("code " * 29) + "code") + "\n" + fence
+
+    wrapped = soft_wrap_markdown("\n\n".join((long_prose, long_bullet, url, fenced)))
+    lines = wrapped.splitlines()
+    assert all(len(line) <= 72 or line == url or line.startswith("code ") for line in lines)
+    bullet_lines = [line for line in lines if "gratitude" in line]
+    assert bullet_lines[0].startswith("- ")
+    assert all(line.startswith("  ") for line in bullet_lines[1:])
+    assert fenced in wrapped
+
+
+def test_persisted_markdown_is_wrapped_for_terminal_editors(tmp_path: Path) -> None:
+    paths = paths_with_config(tmp_path)
+    config = load_or_create_config(paths)
+    enriched = packet()
+    enriched["weave"] = {
+        "type": "sacred",
+        "update_transcript": "This long journal sentence remains readable when edited " * 5,
+    }
+    _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert max(map(len, target.read_text().splitlines())) <= 72
+
+
+def test_trwout_malformed_json_guides_user_and_keeps_parser_detail(
+    tmp_path: Path,
+) -> None:
+    paths = paths_with_config(tmp_path)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    assert (
+        out_cli.run(
+            ["journals"],
+            stdin=io.StringIO('{"looks": "json"} trailing markdown'),
+            stdout=stdout,
+            stderr=stderr,
+            paths=paths,
+        )
+        == 1
+    )
+    assert stdout.getvalue() == ""
+    message = stderr.getvalue()
+    assert "does not appear to be a trwinp or trweave JSON packet" in message
+    assert "malformed" in message and "Extra data" in message
+
+
 def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) -> None:
     paths = paths_with_config(tmp_path)
     vault = paths.config_file.parent / "vault"
@@ -560,7 +609,7 @@ def test_packaged_output_profile_creates_inspectable_cwd_journal(
     enriched["weave"] = {"type": "dream", "update_transcript": "A prototype dream."}
     operation, target = persist(
         enriched,
-        "example-journals",
+        "franks-example",
         config,
         paths,
         warn=lambda _: None,

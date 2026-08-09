@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import string
+import textwrap
 import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -65,6 +66,56 @@ def _safe_target(vault: Path, relative: str) -> Path:
     except ValueError as exc:
         raise OutputError("Destination path escapes the configured vault.") from exc
     return target
+
+
+def soft_wrap_markdown(content: str, *, width: int = 72) -> str:
+    """Wrap editable prose while preserving common Markdown structures."""
+    lines: list[str] = []
+    in_fence = False
+    list_item = re.compile(r"^(\s*(?:[-*+]|\d+[.)])\s+)(.*)$")
+    quote = re.compile(r"^(\s*>\s?)(.*)$")
+    backtick_fence = chr(96) * 3
+
+    for raw_line in content.splitlines():
+        stripped = raw_line.lstrip()
+        if stripped.startswith((backtick_fence, "~~~")):
+            in_fence = not in_fence
+            lines.append(raw_line.rstrip())
+            continue
+        if (
+            in_fence
+            or not raw_line.strip()
+            or raw_line.startswith(("    ", "\t"))
+            or stripped.startswith(("#", "|"))
+            or len(raw_line) <= width
+        ):
+            lines.append(raw_line.rstrip())
+            continue
+
+        match = list_item.match(raw_line) or quote.match(raw_line)
+        if match:
+            prefix, body = match.groups()
+            wrapper = textwrap.TextWrapper(
+                width=width,
+                initial_indent=prefix,
+                subsequent_indent=" " * len(prefix),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            lines.extend(wrapper.wrap(body) or [prefix.rstrip()])
+            continue
+
+        leading = raw_line[: len(raw_line) - len(stripped)]
+        wrapper = textwrap.TextWrapper(
+            width=width,
+            initial_indent=leading,
+            subsequent_indent=leading,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        lines.extend(wrapper.wrap(stripped))
+
+    return "\n".join(lines)
 
 
 def _format(template: Any, *, date: str, time: str, content: str) -> str:
@@ -148,6 +199,7 @@ def persist(
         raise OutputError("Configured category packet field must be a nonempty string.")
     if not isinstance(content, str) or not content.strip():
         raise OutputError("Configured content packet field must be a nonempty string.")
+    content = soft_wrap_markdown(content)
     destinations = profile["destinations"]
     if not isinstance(destinations, Mapping):
         raise OutputError("Output destinations must be an object.")

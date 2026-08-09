@@ -33,9 +33,18 @@ def _read_packet(stdin: TextIO) -> dict[str, Any]:
     text = stdin.read()
     if not text.strip():
         raise ValueError("Standard input did not contain a JSON packet.")
-    value = json.loads(text)
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Input does not appear to be a trwinp or trweave JSON packet; "
+            f"the JSON is malformed ({exc})."
+        ) from exc
     if not isinstance(value, dict):
-        raise ValueError("Input packet must be a JSON object.")
+        raise ValueError(
+            "Input does not appear to be a trwinp or trweave JSON packet; "
+            "the top-level JSON value must be an object."
+        )
     return value
 
 

@@ -12,34 +12,60 @@
       }
     }
   },
+  "_comment_profiles": [
+    "Copy and rename these weave and output profiles to create your",
+    "own provider, prompt, routing, and destination configuration."
+  ],
   "weave": {
     "franks-example": {
-      "_comment": "A weave profile connects a configured provider to either prompt or prompt_file. This Frank-specific example uses the separately provisioned prompt file.",
+      "_comment": [
+        "A weave profile connects one configured provider to an",
+        "inline prompt or prompt file. This example uses",
+        "prompts/example.md."
+      ],
       "provider": "gemini",
       "prompt_file": "prompts/example.md"
     }
   },
   "out": {
-    "example-journals": {
+    "franks-example": {
+      "_comment": [
+        "This output profile routes Frank's transformed transcripts",
+        "to journals and an inbox. Copy and rename it for another",
+        "scheme."
+      ],
       "timezone": "America/Los_Angeles",
       "vault": {
-        "_comment": "For a relative path, use relative_to 'cwd' or 'config'. For an absolute path or a path beginning with '~', omit relative_to.",
+        "_comment": [
+          "Relative paths require relative_to set to cwd or config.",
+          "Omit relative_to for absolute paths and paths beginning",
+          "with ~."
+        ],
         "_comment_examples": [
-          "CWD-relative: {\"path\": \"transcript-weaver-test-output\", \"relative_to\": \"cwd\"}",
-          "Config-relative: {\"path\": \"transcript-weaver-test-output\", \"relative_to\": \"config\"}",
-          "Absolute: {\"path\": \"/absolute/path/to/your/Obsidian/Vault\"}",
-          "Home-relative: {\"path\": \"~/Obsidian/My Vault\"}"
+          "CWD relative: path test-output, relative_to cwd.",
+          "Config relative: path test-output, relative_to config.",
+          "Absolute: path /absolute/path/to/your/Obsidian/Vault.",
+          "Home relative: path ~/Obsidian/My Vault."
         ],
         "path": "transcript-weaver-test-output",
         "relative_to": "cwd"
       },
       "packet_fields": {
+        "_comment": [
+          "Dotted packet paths select the routing category and",
+          "the cleaned Markdown body inserted as the content",
+          "placeholder."
+        ],
         "category": "weave.type",
-        "content": "weave.update_transcript",
-        "_comment": "Dotted packet paths select the category used for routing and the cleaned body used as {content}."
+        "content": "weave.update_transcript"
       },
       "destinations": {
-        "_comment": "insert destinations atomically place '## {date}' plus {content} in date order; same-date entries are both kept with a dashed separator and a stderr diagnostic. create destinations make standalone files. Only {date}, {time}, and {content} are supported placeholders.",
+        "_comment": [
+          "Insert places a date heading and content in",
+          "chronological order. Duplicate dates get a separator",
+          "and stderr warning. Create writes one new file.",
+          "Supported placeholders are date, time, and content."
+        ],
         "gratitude": {
           "operation": "insert",
           "file": "Gratitude Journal.md",
@@ -66,9 +92,7 @@
           "filename": "unknown-{date}-{time}.md",
           "format": "{content}\n"
         }
-      },
-      "_comment": "This output profile maps weave.type and weave.update_transcript to Frank's journal and inbox destinations. Copy and rename it to create a different filing scheme."
+      }
     }
-  },
-  "_comment_profiles": "Create your own named weave and out profiles by copying these examples and changing their provider, prompt, packet-field mappings, and destinations."
+  }
 }

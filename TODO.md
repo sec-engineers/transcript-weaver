@@ -1,5 +1,4 @@
 # TODO
 
 - Consider additional transformation providers after a concrete user need appears.
-- Add source cleanup as a separate, explicitly authorized future operation.
-- Revisit same-date journal grouping only if external-user requirements emerge.
+- Consider CLI tool to find/edit config and prompts - also view/diff debug files

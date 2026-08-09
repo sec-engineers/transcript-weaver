@@ -154,12 +154,20 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
     assert prompt_path.read_bytes() == packaged_example_prompt_bytes()
     assert "dream|gratitude|ses|sacred|unknown" in prompt_path.read_text()
-    vault = config.out["example-journals"]["vault"]
+    vault = config.out["franks-example"]["vault"]
     assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
     stored = json.loads(app_paths.config_file.read_text())
-    assert stored["out"]["example-journals"]["vault"]["_comment"]
+    assert stored["out"]["franks-example"]["vault"]["_comment"]
     assert set(config.weave) == {"franks-example"}
-    destinations = config.out["example-journals"]["destinations"]
+    assert set(config.out) == {"franks-example"}
+    raw_config = app_paths.config_file.read_text()
+    assert max(map(len, raw_config.splitlines())) <= 75
+    assert raw_config.index('"_comment_profiles"') < raw_config.index('"weave"')
+    output_start = raw_config.index('"out"')
+    assert raw_config.index('"_comment"', output_start) < raw_config.index(
+        '"timezone"', output_start
+    )
+    destinations = config.out["franks-example"]["destinations"]
     assert {
         name: destination.get("file", destination.get("directory"))
         for name, destination in destinations.items()
@@ -216,11 +224,11 @@ def test_top_level_configuration_error_lists_missing_and_unrecognized_fields(
             "weave.franks-example must contain exactly one of prompt or prompt_file",
         ),
         (
-            lambda value: value["out"]["example-journals"]["packet_fields"].pop("content"),
+            lambda value: value["out"]["franks-example"]["packet_fields"].pop("content"),
             "packet_fields has missing required fields: content",
         ),
         (
-            lambda value: value["out"]["example-journals"]["vault"].update(
+            lambda value: value["out"]["franks-example"]["vault"].update(
                 {"relative_to": "elsewhere"}
             ),
             "vault.relative_to must be 'cwd' or 'config'",
@@ -244,13 +252,13 @@ def test_vault_path_object_accepts_cwd_config_absolute_and_home(tmp_path: Path) 
         {"path": "~/test-output"},
     ):
         value = json.loads(packaged_default_config_bytes())
-        value["out"]["example-journals"]["vault"] = vault
+        value["out"]["franks-example"]["vault"] = vault
         assert validate_config(value, path=tmp_path / "config.json")
 
 
 def test_absolute_vault_rejects_relative_to(tmp_path: Path) -> None:
     value = json.loads(packaged_default_config_bytes())
-    value["out"]["example-journals"]["vault"] = {
+    value["out"]["franks-example"]["vault"] = {
         "path": "/absolute/test-output",
         "relative_to": "cwd",
     }

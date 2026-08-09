@@ -30,7 +30,7 @@ trwinp -> normalized JSON -> trweave -> enriched JSON -> trwout
 ```
 
 ```bash
-trwinp otter | trweave franks-example | trwout example-journals
+trwinp otter | trweave franks-example | trwout franks-example
 ```
 
 Standard output is reserved for JSON packets. Diagnostics and errors use standard
@@ -115,7 +115,7 @@ A coherent configuration looks like this:
     }
   },
   "out": {
-    "example-journals": {
+    "franks-example": {
       "timezone": "America/Los_Angeles",
       "vault": {
         "_comment": "Use relative_to cwd or config for relative paths; omit it for absolute or ~ paths.",
