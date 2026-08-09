@@ -24,7 +24,7 @@ def test_live_gemini_small_safe_transformation() -> None:
     provider = GeminiProvider("gemini-2.5-flash-lite", "api/gemini")
     response = provider.transform(
         SYSTEM_INSTRUCTION,
-        "Add a top-level weave object with type='gratitude' and a short content "
+        "Add a top-level weave object with type='gratitude' and a short update_transcript "
         "Markdown bullet. Never put weave inside metadata.",
         json.dumps(packet),
     )

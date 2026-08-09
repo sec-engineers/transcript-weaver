@@ -33,7 +33,7 @@ class FakeProvider:
     def transform(self, system: str, prompt: str, packet_json: str) -> str:
         self.calls.append((system, prompt, packet_json))
         packet = json.loads(packet_json)
-        packet["weave"] = {"type": self.category, "content": self.content}
+        packet["weave"] = {"type": self.category, "update_transcript": self.content}
         return json.dumps(packet)
 
 
@@ -67,7 +67,7 @@ def base_config(vault: str = "vault") -> dict[str, Any]:
             "Journals": {
                 "timezone": "America/Los_Angeles",
                 "vault": vault,
-                "packet_fields": {"category": "weave.type", "content": "weave.content"},
+                "packet_fields": {"category": "weave.type", "content": "weave.update_transcript"},
                 "destinations": destinations,
             }
         },
@@ -187,7 +187,7 @@ def test_configured_prompt_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_strict_response_preservation() -> None:
     original = packet()
     enriched = json.loads(json.dumps(original))
-    enriched["weave"] = {"type": "x", "content": "y"}
+    enriched["weave"] = {"type": "x", "update_transcript": "y"}
     assert validate_response(json.dumps(enriched), original) == enriched
     for text in ("```json\n{}\n```", "[]", "{}"):
         with pytest.raises(WeaveError):
@@ -200,6 +200,55 @@ def test_strict_response_preservation() -> None:
     del deleted["source"]
     with pytest.raises(WeaveError, match="deleted"):
         validate_response(json.dumps(deleted), original)
+
+
+def test_provider_transcript_change_becomes_added_debug_field() -> None:
+    original = packet()
+    provider_output = json.loads(json.dumps(original))
+    provider_output["transcript"] = "Cleaned alternative"
+    provider_output["weave"] = {"type": "sacred", "update_transcript": "Cleaned journal body"}
+
+    result = validate_response(json.dumps(provider_output), original)
+
+    assert result["transcript"] == original["transcript"]
+    assert result["weave"]["update_transcript"] == "Cleaned journal body"
+    assert "updated_transcript" not in result
+    assert original["transcript"] == "PRIVATE"
+
+
+def test_other_preservation_failure_saves_bounded_sensitive_packets(
+    tmp_path: Path,
+) -> None:
+    class ModifyingProvider(FakeProvider):
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            value = json.loads(packet_json)
+            value["source"]["name"] = "Changed name"
+            value["weave"] = {"type": "sacred", "update_transcript": "Cleaned"}
+            return json.dumps(value)
+
+    paths = paths_with_config(tmp_path)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup"],
+            stdin=io.StringIO(json.dumps(packet())),
+            stdout=stdout,
+            stderr=stderr,
+            paths=paths,
+            provider=ModifyingProvider(),
+        )
+        == 1
+    )
+    assert stdout.getvalue() == ""
+    assert "Provider modified original field packet.source.name" in stderr.getvalue()
+    assert "sensitive packet-preservation diagnostics" in stderr.getvalue()
+    artifacts = sorted((paths.log_directory / "packet-failures").glob("*.json"))
+    assert [path.name for path in artifacts] == [
+        f"{RUN}-trweave-original.json",
+        f"{RUN}-trweave-provider.json",
+    ]
+    assert json.loads(artifacts[0].read_text())["source"]["name"] == "Note"
+    assert json.loads(artifacts[1].read_text())["source"]["name"] == "Changed name"
 
 
 def test_weave_cli_success_and_secret_safe_log(tmp_path: Path) -> None:
@@ -248,7 +297,7 @@ def test_reliable_duration_deterministically_routes_long_recordings(
         == 0
     )
     result = json.loads(stdout.getvalue())
-    assert result["weave"] == {"type": expected, "content": "- Still cleaned"}
+    assert result["weave"] == {"type": expected, "update_transcript": "- Still cleaned"}
     assert result["metadata"]["duration_seconds"] == duration
 
 
@@ -332,7 +381,7 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
     paths = paths_with_config(tmp_path)
     vault = paths.config_file.parent / "vault"
     enriched = packet()
-    enriched["weave"] = {"type": "gratitude", "content": "first"}
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "first"}
     stderr = io.StringIO()
     assert (
         out_cli.run(
@@ -342,7 +391,7 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
     )
     journal = vault / "Gratitude Journal.md"
     assert "## 2026-08-05" in journal.read_text()
-    enriched["weave"]["content"] = "second"
+    enriched["weave"]["update_transcript"] = "second"
     stderr = io.StringIO()
     assert (
         out_cli.run(
@@ -362,7 +411,7 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
     paths = paths_with_config(tmp_path / "append", value)
     config = load_or_create_config(paths)
     assert persist(enriched, "journals", config, paths, warn=lambda _: None)[0] == "append"
-    enriched["weave"] = {"type": "unknown", "content": "misc"}
+    enriched["weave"] = {"type": "unknown", "update_transcript": "misc"}
     paths = paths_with_config(tmp_path / "create")
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 0
     assert list((paths.config_file.parent / "vault" / "00 Inbox").glob("*.md"))
@@ -370,7 +419,7 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
     unsafe = base_config()
     unsafe["out"]["Journals"]["destinations"]["gratitude"]["file"] = "../escape.md"
     paths = paths_with_config(tmp_path / "unsafe", unsafe)
-    enriched["weave"] = {"type": "gratitude", "content": "x"}
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "x"}
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 1
 
 
@@ -382,7 +431,7 @@ def test_timezone_crosses_date_and_dst(tmp_path: Path) -> None:
         ("2026-01-05T07:30:00Z", "2026-01-04"),
     ]:
         enriched = packet(dt)
-        enriched["weave"] = {"type": "dream", "content": dt}
+        enriched["weave"] = {"type": "dream", "update_transcript": dt}
         _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
         assert expected in target.read_text()
 
@@ -454,7 +503,7 @@ def test_provider_permanent_http_failure_is_not_retried(
         (lambda value: value.update({"timezone": "Not/AZone"}), "timezone"),
         (
             lambda value: value.update(
-                {"packet_fields": {"category": "missing", "content": "weave.content"}}
+                {"packet_fields": {"category": "missing", "content": "weave.update_transcript"}}
             ),
             "missing",
         ),
@@ -471,7 +520,7 @@ def test_output_validation_errors_leave_existing_file_unchanged(
     journal.parent.mkdir(parents=True)
     journal.write_text("original")
     enriched = packet()
-    enriched["weave"] = {"type": "gratitude", "content": "new"}
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "new"}
     stderr = io.StringIO()
     assert (
         out_cli.run(
@@ -488,7 +537,7 @@ def test_output_validation_errors_leave_existing_file_unchanged(
 
 def test_unknown_category_and_invalid_format_are_rejected(tmp_path: Path) -> None:
     enriched = packet()
-    enriched["weave"] = {"type": "not-configured", "content": "new"}
+    enriched["weave"] = {"type": "not-configured", "update_transcript": "new"}
     paths = paths_with_config(tmp_path / "unknown")
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 1
 
@@ -508,7 +557,7 @@ def test_packaged_output_profile_creates_inspectable_cwd_journal(
     monkeypatch.chdir(run_directory)
     config = load_or_create_config(paths)
     enriched = packet()
-    enriched["weave"] = {"type": "dream", "content": "A prototype dream."}
+    enriched["weave"] = {"type": "dream", "update_transcript": "A prototype dream."}
     operation, target = persist(
         enriched,
         "example-journals",

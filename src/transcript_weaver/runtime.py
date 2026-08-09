@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
 import time
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,9 +19,9 @@ ARTIFACT_SUFFIX_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DIAGNOSTIC_FILE_PATTERN = re.compile(
     r"^(?P<run>\d{8}-\d{6}-[0-9a-f]{4})-"
     r"(?P<stage>trwinp|trweave|trwout)(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
-    r"(?P<extension>\.log|\.html|\.png)$"
+    r"(?P<extension>\.log|\.html|\.png|\.json)$"
 )
-SUPPORTED_EXTENSIONS = {".log", ".html", ".png"}
+SUPPORTED_EXTENSIONS = {".log", ".html", ".png", ".json"}
 
 
 class RunIdError(ValueError):
@@ -175,6 +177,39 @@ def write_debug_artifact(
         with path.open("x", encoding="utf-8") as stream:
             stream.write(content)
     return path
+
+
+def write_preservation_artifacts(
+    log_directory: Path,
+    run_id: str,
+    *,
+    original: Mapping[str, Any],
+    provider_output: Mapping[str, Any],
+) -> tuple[Path, Path]:
+    """Persist sensitive before/after packets for an immutable-field failure."""
+    failure_directory = log_directory / "packet-failures"
+    original_path = write_debug_artifact(
+        failure_directory,
+        run_id,
+        "trweave",
+        suffix="original",
+        extension=".json",
+        content=json.dumps(original, ensure_ascii=False, indent=2) + "\n",
+    )
+    try:
+        provider_path = write_debug_artifact(
+            failure_directory,
+            run_id,
+            "trweave",
+            suffix="provider",
+            extension=".json",
+            content=json.dumps(provider_output, ensure_ascii=False, indent=2) + "\n",
+        )
+    except BaseException:
+        with suppress(FileNotFoundError):
+            original_path.unlink()
+        raise
+    return original_path, provider_path
 
 
 def apply_log_retention(

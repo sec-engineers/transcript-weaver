@@ -65,7 +65,7 @@ provider to add fields. A valid result includes:
   "source": {"type": "otter", "name": "Morning note", "reference": "https://otter.ai/u/example"},
   "transcript": "Original transcript text",
   "metadata": {"duration_seconds": 180.0},
-  "weave": {"type": "gratitude", "content": "- I am grateful for this morning."}
+  "weave": {"type": "gratitude", "update_transcript": "- I am grateful for this morning."}
 }
 ```
 
@@ -122,7 +122,7 @@ A coherent configuration looks like this:
         "path": "transcript-weaver-test-output",
         "relative_to": "cwd"
       },
-      "packet_fields": {"category": "weave.type", "content": "weave.content"},
+      "packet_fields": {"category": "weave.type", "content": "weave.update_transcript"},
       "destinations": {
         "gratitude": {
           "operation": "insert",
@@ -161,9 +161,11 @@ searching occurs.
 
 Gemini credentials are read from `pass`; secrets never belong in configuration.
 The implementation uses Gemini's REST API directly, requests JSON, and retries
-only bounded transient network errors and HTTP 429/5xx responses. Fenced,
-explanatory, partial, non-object, field-modifying, or invalid `weave` responses
-are rejected without repair.
+only bounded transient network errors and HTTP 429/5xx responses. Every input field
+is immutable. If the provider replaces `transcript`, Weaver preserves the original
+and uses that attempted replacement only when needed to populate
+`weave.update_transcript`; no duplicate top-level transformed-text field is emitted. Other deleted or modified input fields remain errors. Fenced, explanatory,
+partial, non-object, or invalid `weave` responses are rejected.
 
 ## Output
 
@@ -189,9 +191,16 @@ word-boundary wrapping while keeping long-form unknown content substantially ver
 All commands accept `--log`, `--verbose`, and `--debug-artifacts`. Logs are
 optional, grouped by run ID, and retained according to `logging.retained_runs`.
 They may contain stage, profile, model, operation, relative destination, timing,
-and sanitized failure information. They never contain transcripts, prompts,
+and sanitized failure information. Ordinary logs never contain transcripts, prompts,
 transformed content, provider bodies, credentials, or complete journals.
-Debug artifacts are intended for Otter browser diagnostics and may be sensitive.
+
+If a provider changes or deletes an immutable packet field, `trweave` writes the
+complete original and provider JSON documents under
+`<log-directory>/packet-failures/`. These files are intentionally sufficient for a
+manual diff and therefore may contain complete transcripts and other private packet
+data. Inspect them before sharing. They are grouped by run ID and bounded by
+`logging.retained_runs`; the current failure is always retained. Debug artifacts are
+also potentially sensitive.
 
 ## Project version and distribution builds
 

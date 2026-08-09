@@ -16,8 +16,14 @@ from transcript_weaver.config import (
     load_or_create_config,
 )
 from transcript_weaver.profiles import available_profiles
-from transcript_weaver.runtime import RunIdError, ensure_packet_run_id
-from transcript_weaver.weave.core import WeaveError, transform
+from transcript_weaver.runtime import (
+    DiagnosticError,
+    RunIdError,
+    apply_log_retention,
+    ensure_packet_run_id,
+    write_preservation_artifacts,
+)
+from transcript_weaver.weave.core import PreservationError, WeaveError, transform
 from transcript_weaver.weave.provider import Provider
 
 
@@ -81,6 +87,34 @@ def run(
         stdout.write(json.dumps(enriched, ensure_ascii=False, indent=2) + "\n")
         invocation.close(success=True)
         return 0
+    except PreservationError as exc:
+        if invocation is not None:
+            failure_directory = invocation.paths.log_directory / "packet-failures"
+            try:
+                original_path, provider_path = write_preservation_artifacts(
+                    invocation.paths.log_directory,
+                    invocation.run_id,
+                    original=exc.original,
+                    provider_output=exc.provider_output,
+                )
+                invocation.warning(
+                    "saved sensitive packet-preservation diagnostics to "
+                    f"{original_path} and {provider_path}; inspect before sharing"
+                )
+                apply_log_retention(
+                    failure_directory,
+                    invocation.config.logging.retained_runs,
+                    current_run_id=invocation.run_id,
+                    warn=invocation.warning,
+                )
+            except (DiagnosticError, OSError, TypeError, ValueError) as artifact_error:
+                invocation.warning(
+                    f"could not save packet-preservation diagnostics: {artifact_error}"
+                )
+            invocation.log.exception(type(exc).__name__)
+            invocation.close(success=False)
+        print(f"trweave: {exc}", file=stderr)
+        return 1
     except (
         ConfigurationError,
         RunIdError,

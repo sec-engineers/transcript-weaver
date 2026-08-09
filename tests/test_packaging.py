@@ -26,5 +26,6 @@ def test_project_version_has_one_dynamic_source_and_packet_format() -> None:
 
     assert data["project"]["dynamic"] == ["version"]
     assert data["tool"]["hatch"]["version"]["path"] == ("src/transcript_weaver/_version.py")
+    assert "/.transcript-weaver-build.lock" in data["tool"]["hatch"]["build"]["exclude"]
     assert re.fullmatch(r"\d+\.\d+\.\d{4}", __version__)
     assert (project_root / "src/transcript_weaver/_version.py").read_text().count(__version__) == 1

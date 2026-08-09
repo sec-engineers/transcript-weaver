@@ -14,8 +14,9 @@ from transcript_weaver.weave.provider import Provider, ProviderError, build_prov
 SYSTEM_INSTRUCTION = (
     "You are one stage in a JSON-to-JSON pipeline. Return exactly one complete JSON "
     "object with no Markdown fences or explanatory prose. Preserve every input field "
-    "and value exactly: do not modify or delete anything. Add transformation results "
-    "without changing existing data. Add weave as a TOP-LEVEL sibling of metadata, "
+    "and value exactly: do not modify or delete anything. Put the cleaned transcript "
+    "only in weave.update_transcript and leave transcript unchanged. Add transformation "
+    "results without changing existing data. Add weave as a TOP-LEVEL sibling of metadata, "
     "never inside metadata or another field. Follow the user transformation prompt for "
     "classification and content."
 )
@@ -23,6 +24,17 @@ SYSTEM_INSTRUCTION = (
 
 class WeaveError(RuntimeError):
     pass
+
+
+class PreservationError(WeaveError):
+    """Provider output changed or deleted an immutable input field."""
+
+    def __init__(
+        self, message: str, *, original: dict[str, Any], provider_output: dict[str, Any]
+    ) -> None:
+        super().__init__(message)
+        self.original = original
+        self.provider_output = provider_output
 
 
 def _read_prompt(path: Path) -> str:
@@ -98,17 +110,45 @@ def validate_response(text: str, original: dict[str, Any]) -> dict[str, Any]:
         raise WeaveError("Provider response was not exactly one valid JSON object.") from exc
     if not isinstance(enriched, dict):
         raise WeaveError("Provider response must be a top-level JSON object.")
-    _preserves(original, enriched)
+
+    attempted_transcript: Any = None
+    transcript_was_changed = (
+        "transcript" in original and enriched.get("transcript") != original["transcript"]
+    )
+    if transcript_was_changed:
+        if "transcript" not in enriched:
+            raise PreservationError(
+                "Provider deleted original field packet.transcript.",
+                original=original,
+                provider_output=enriched,
+            )
+        attempted_transcript = enriched["transcript"]
+        enriched["transcript"] = original["transcript"]
+
     weave = enriched.get("weave")
+    if isinstance(weave, dict) and "weave" not in original:
+        legacy_content = weave.pop("content", None)
+        if "update_transcript" not in weave and legacy_content is not None:
+            weave["update_transcript"] = legacy_content
+        outer_update = enriched.pop("updated_transcript", None)
+        if "update_transcript" not in weave and outer_update is not None:
+            weave["update_transcript"] = outer_update
+        if "update_transcript" not in weave and transcript_was_changed:
+            weave["update_transcript"] = attempted_transcript
+
+    try:
+        _preserves(original, enriched)
+    except WeaveError as exc:
+        raise PreservationError(str(exc), original=original, provider_output=enriched) from exc
     if (
         not isinstance(weave, dict)
         or not isinstance(weave.get("type"), str)
         or not weave["type"].strip()
-        or not isinstance(weave.get("content"), str)
-        or not weave["content"].strip()
+        or not isinstance(weave.get("update_transcript"), str)
+        or not weave["update_transcript"].strip()
     ):
         raise WeaveError(
-            "Provider response must contain weave with nonempty string type and content."
+            "Provider response must contain weave with nonempty string type and update_transcript."
         )
     return enriched
 

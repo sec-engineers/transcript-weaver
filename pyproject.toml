@@ -37,6 +37,9 @@ trwinp = "transcript_weaver.inp.cli:main"
 trweave = "transcript_weaver.weave.cli:main"
 trwout = "transcript_weaver.out.cli:main"
 
+[tool.hatch.build]
+exclude = ["/.transcript-weaver-build.lock"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/transcript_weaver"]
 

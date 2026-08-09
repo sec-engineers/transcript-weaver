@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Consolidated cleaned text in `weave.update_transcript`, removing duplicate
+  `weave.content` and top-level `updated_transcript` output while keeping the source
+  `transcript` immutable.
+- Added paired, sensitive original/provider JSON diagnostics for other preservation
+  failures under a retention-bounded `packet-failures` directory.
 - Renamed the packaged weave profile to `franks-example` and corrected its
   Gratitude, Dream, SEs, Sacred, and Unknown journal routing and filenames.
 - Added reliable Otter duration metadata and deterministic Unknown routing for

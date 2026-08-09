@@ -7,7 +7,7 @@ Add this transformation result to the supplied packet:
 {
   "weave": {
     "type": "dream|gratitude|ses|sacred|unknown",
-    "content": "clean Markdown body only"
+    "update_transcript": "clean Markdown body only"
   }
 }
 ```
@@ -35,7 +35,7 @@ speaker labels, menus, "copy summary", and other non-transcript UI artifacts.
 
 For gratitude entries:
 
-- `weave.content` must be a Markdown bullet list.
+- `weave.update_transcript` must be a Markdown bullet list.
 - Every distinct gratitude item must start with `- ` on its own line.
 - Do not use plain unbulleted lines, paragraphs, or numbered lists.
 - Preserve the user's meaning and emotional emphasis.
@@ -69,7 +69,8 @@ Apply these prototype corrections when context supports them:
 
 Formatting:
 
-- Put Markdown body text only in `weave.content`.
+- Preserve every supplied packet field exactly. Never replace `transcript`.
+- Put the cleaned Markdown body only in `weave.update_transcript`.
 - Soft-wrap appropriate narrative paragraphs around 72 characters at word
   boundaries without damaging Markdown.
 - Never add Markdown fences or commentary to the provider's JSON response.

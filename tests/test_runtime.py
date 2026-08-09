@@ -14,6 +14,7 @@ from transcript_weaver.runtime import (
     generate_run_id,
     validate_run_id,
     write_debug_artifact,
+    write_preservation_artifacts,
 )
 
 RUN1 = "20260728-100000-a1b2"
@@ -148,7 +149,32 @@ def test_byte_artifact_and_invalid_stage_extension(tmp_path: Path) -> None:
     with pytest.raises(DiagnosticError):
         build_diagnostic_path(tmp_path, RUN1, "bad-stage", extension=".log")
     with pytest.raises(DiagnosticError):
-        build_diagnostic_path(tmp_path, RUN1, "trwinp", extension=".json")
+        build_diagnostic_path(tmp_path, RUN1, "trwinp", extension=".txt")
+
+
+def test_sensitive_preservation_artifacts_are_json_and_retained_by_run(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "packet-failures"
+    first = write_preservation_artifacts(
+        tmp_path,
+        RUN1,
+        original={"transcript": "original one"},
+        provider_output={"transcript": "changed one"},
+    )
+    second = write_preservation_artifacts(
+        tmp_path,
+        RUN2,
+        original={"transcript": "original two"},
+        provider_output={"transcript": "changed two"},
+    )
+    assert all(path.parent == directory and path.suffix == ".json" for path in first + second)
+    assert "original one" in first[0].read_text()
+    assert "changed one" in first[1].read_text()
+
+    apply_log_retention(directory, 1, current_run_id=RUN2, warn=lambda _: None)
+    assert not any(path.exists() for path in first)
+    assert all(path.exists() for path in second)
 
 
 def test_verbose_logger_supports_debug_warning_and_traceback(tmp_path: Path) -> None:

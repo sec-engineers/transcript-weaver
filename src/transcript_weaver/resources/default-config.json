@@ -35,7 +35,7 @@
       },
       "packet_fields": {
         "category": "weave.type",
-        "content": "weave.content",
+        "content": "weave.update_transcript",
         "_comment": "Dotted packet paths select the category used for routing and the cleaned body used as {content}."
       },
       "destinations": {
@@ -67,7 +67,7 @@
           "format": "{content}\n"
         }
       },
-      "_comment": "This output profile maps weave.type and weave.content to Frank's journal and inbox destinations. Copy and rename it to create a different filing scheme."
+      "_comment": "This output profile maps weave.type and weave.update_transcript to Frank's journal and inbox destinations. Copy and rename it to create a different filing scheme."
     }
   },
   "_comment_profiles": "Create your own named weave and out profiles by copying these examples and changing their provider, prompt, packet-field mappings, and destinations."

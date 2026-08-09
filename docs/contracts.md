@@ -20,9 +20,13 @@ keys provide inline documentation and are ignored by runtime validation.
 
 Reads exactly one JSON object and emits exactly one enriched JSON object. Direct
 prompt paths use Gemini; profiles name both provider and either inline `prompt`
-or `prompt_file`. The model must preserve every original value and add a usable
-`weave` object containing nonempty `type` and `content` strings. Validation is
-strict and provider output is never silently repaired. A packet's `trw_version` is informational only: it is preserved exactly when present, but never used to reject a
+or `prompt_file`. Every original field is immutable and the provider may only add
+fields. The result must contain a usable `weave` object with nonempty `type` and
+`content` strings. A provider replacement for `transcript` is retained as the added
+nested `weave.update_transcript` field while the original `transcript` remains exact.
+No duplicate top-level transformed-transcript field is emitted.
+Other changed or deleted input fields are errors. A packet's `trw_version` is
+informational only: it is preserved exactly when present, but never used to reject a
 packet or decide compatibility, and legacy packets without it remain accepted. A
 reliable duration greater than 300 seconds deterministically overrides the returned
 category to `unknown`; exactly 300 seconds does not.
@@ -36,8 +40,7 @@ calendar date. Same-date entries are both retained, with the newer arrival after
 existing same-date entries, a `---` separator, and a date-specific warning on stderr. `append` and non-overwriting
 `create` are deterministic. Existing-file changes use atomic replacement.
 
-`weave.type` selects the case-insensitive destination key. `weave.content` is
-rendered into that destination's `format`. Neither output routing nor
+`weave.type` selects the case-insensitive destination key. `weave.update_transcript` is rendered into that destination's `format`. Neither output routing nor
 classification is hard-coded into the commands.
 
 ## Process channels and diagnostics
@@ -45,7 +48,10 @@ classification is hard-coded into the commands.
 Packet-producing success writes one JSON object to stdout. Failure writes no
 partial JSON. `trwout` success has no stdout. Errors and warnings go to stderr.
 Persistent logs are opt-in and must exclude packet text, prompts, response
-content, secrets, and journal contents.
+content, secrets, and journal contents. The exception is an immutable-field failure:
+`trweave` saves complete `original.json` and `provider.json` packets beneath the
+per-user `packet-failures` directory. They are sensitive, named by run ID, and retained
+according to `logging.retained_runs` so failures are diffable without unbounded growth.
 
 ## Distribution build
 
