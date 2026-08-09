@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from transcript_weaver import __version__
 from transcript_weaver.runtime import generate_run_id, validate_run_id
 
 SCHEMA_VERSION = 1
@@ -44,6 +46,7 @@ class AcquiredTranscript:
     transcript: str
     recorded_at: datetime
     source: Source
+    duration_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +68,11 @@ class TranscriptPacket:
             source=acquired.source,
             transcript=acquired.transcript,
             run_id=run_id or generate_run_id(),
+            metadata=(
+                {"duration_seconds": acquired.duration_seconds}
+                if acquired.duration_seconds is not None
+                else {}
+            ),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -73,9 +81,18 @@ class TranscriptPacket:
             raise ModelError("Transcript is empty.")
         if self.recorded_at.tzinfo is None or self.recorded_at.utcoffset() is None:
             raise ModelError("Transcript datetime must include timezone information.")
+        duration = self.metadata.get("duration_seconds")
+        if duration is not None and (
+            isinstance(duration, bool)
+            or not isinstance(duration, (int, float))
+            or not math.isfinite(duration)
+            or duration < 0
+        ):
+            raise ModelError("Transcript duration_seconds must be a finite nonnegative number.")
         utc_value = self.recorded_at.astimezone(timezone.utc).replace(microsecond=0)
         return {
             "schema_version": SCHEMA_VERSION,
+            "trw_version": __version__,
             "run": {"id": validate_run_id(self.run_id)},
             "datetime": utc_value.strftime(UTC_DATETIME_FORMAT),
             "source": self.source.as_dict(),

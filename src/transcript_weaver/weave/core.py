@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,23 @@ def validate_response(text: str, original: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
+def _duration_forces_unknown(packet: dict[str, Any]) -> bool:
+    metadata = packet.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    duration = metadata.get("duration_seconds")
+    if duration is None:
+        return False
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(duration)
+        or duration < 0
+    ):
+        raise WeaveError("metadata.duration_seconds must be a finite nonnegative number.")
+    return duration > 300
+
+
 def transform(
     packet: dict[str, Any],
     argument: str,
@@ -131,4 +149,7 @@ def transform(
         )
     except (ConfigurationError, ProviderError) as exc:
         raise WeaveError(str(exc)) from exc
-    return validate_response(response, packet), selected, active.model
+    enriched = validate_response(response, packet)
+    if _duration_forces_unknown(packet):
+        enriched["weave"]["type"] = "unknown"
+    return enriched, selected, active.model

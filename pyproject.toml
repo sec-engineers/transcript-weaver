@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "transcript-weaver"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A safe, Unix-style transcript processing pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,6 +39,9 @@ trwout = "transcript_weaver.out.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/transcript_weaver"]
+
+[tool.hatch.version]
+path = "src/transcript_weaver/_version.py"
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --cov=transcript_weaver --cov-report=term-missing"

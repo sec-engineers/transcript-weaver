@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from transcript_weaver import __version__
 from transcript_weaver.weave.core import SYSTEM_INSTRUCTION, validate_response
 from transcript_weaver.weave.provider import GeminiProvider
 
@@ -13,6 +14,7 @@ def test_live_gemini_small_safe_transformation() -> None:
         pytest.skip("set TRANSCRIPT_WEAVER_LIVE_GEMINI=1 to enable live Gemini access")
     packet = {
         "schema_version": 1,
+        "trw_version": __version__,
         "run": {"id": "20260805-120000-a1b2"},
         "datetime": "2026-08-05T12:00:00Z",
         "source": {"type": "test"},

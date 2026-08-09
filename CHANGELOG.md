@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Renamed the packaged weave profile to `franks-example` and corrected its
+  Gratitude, Dream, SEs, Sacred, and Unknown journal routing and filenames.
+- Added reliable Otter duration metadata and deterministic Unknown routing for
+  recordings longer than five minutes; updated cleanup guidance to 72 columns.
+- Added dashed separation and date-specific stderr diagnostics for duplicate-date
+  journal entries.
+- Added the project `trw_version` packet field and an atomic, locked distribution-build
+  command with automatic four-digit build increments and rollback on failure.
+- Made packet `trw_version` informational-only bug-report metadata; downstream stages
+  preserve it when present without using it as a compatibility gate.
 - Updated live Otter compatibility for relative recording links, Today/Yesterday
   timestamps, and the current transcript More Options selector; unexpected browser
   failures now retain a concise underlying cause.

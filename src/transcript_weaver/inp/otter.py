@@ -40,6 +40,7 @@ class OtterCapture:
     displayed_datetime: str
     title: str | None
     url: str
+    duration_seconds: float | None = None
 
 
 class OtterClient(Protocol):
@@ -94,6 +95,7 @@ class OtterSource:
             transcript=capture.transcript,
             recorded_at=recorded_at,
             source=Source(type="otter", name=capture.title, reference=capture.url),
+            duration_seconds=capture.duration_seconds,
         )
 
 
@@ -243,8 +245,11 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
                     self._capture_debug(page, "transcript-page")
                     self._log.debug("Extracting Otter recording datetime")
                     displayed_datetime = self._visible_recording_datetime(page)
+                    duration_seconds = self._media_duration_seconds(page)
                     transcript = self._copy_transcript(page)
-                    return OtterCapture(transcript, displayed_datetime, title, url)
+                    return OtterCapture(
+                        transcript, displayed_datetime, title, url, duration_seconds
+                    )
                 except (
                     AuthenticationRequiredError,
                     SourceUnavailableError,
@@ -418,6 +423,24 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
             raise SourceUnavailableError("Otter page text was unavailable.")
         parse_otter_datetime(body)
         return body
+
+    def _media_duration_seconds(self, page: Any) -> float | None:
+        value = page.evaluate(
+            """() => {
+                const durations = Array.from(document.querySelectorAll('audio, video'))
+                    .map(element => Number(element.duration))
+                    .filter(duration => Number.isFinite(duration) && duration >= 0);
+                return durations.length ? Math.max(...durations) : null;
+            }"""
+        )
+        if value is None:
+            self._log.debug("Otter exposed no reliable media duration")
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            self._log.debug("Otter exposed an invalid media duration")
+            return None
+        self._log.debug("Extracted Otter media duration")
+        return float(value)
 
     def _copy_transcript(self, page: Any) -> str:
         tab = page.locator('[data-testid="tab-Transcript"]').first

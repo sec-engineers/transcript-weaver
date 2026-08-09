@@ -13,7 +13,8 @@
     }
   },
   "weave": {
-    "transcript-cleanup": {
+    "franks-example": {
+      "_comment": "A weave profile connects a configured provider to either prompt or prompt_file. This Frank-specific example uses the separately provisioned prompt file.",
       "provider": "gemini",
       "prompt_file": "prompts/example.md"
     }
@@ -34,9 +35,11 @@
       },
       "packet_fields": {
         "category": "weave.type",
-        "content": "weave.content"
+        "content": "weave.content",
+        "_comment": "Dotted packet paths select the category used for routing and the cleaned body used as {content}."
       },
       "destinations": {
+        "_comment": "insert destinations atomically place '## {date}' plus {content} in date order; same-date entries are both kept with a dashed separator and a stderr diagnostic. create destinations make standalone files. Only {date}, {time}, and {content} are supported placeholders.",
         "gratitude": {
           "operation": "insert",
           "file": "Gratitude Journal.md",
@@ -47,23 +50,25 @@
           "file": "Dream Journal.md",
           "format": "## {date}\n\n{content}\n\n"
         },
-        "dss": {
+        "ses": {
           "operation": "insert",
-          "file": "DSS Chronicles.md",
+          "file": "SEs Journal.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "sacred": {
           "operation": "insert",
-          "file": "Sacred Journey Journal.md",
+          "file": "Sacred Journey.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "unknown": {
           "operation": "create",
           "directory": "00 Inbox",
-          "filename": "{date}-{time}-unknown.md",
+          "filename": "unknown-{date}-{time}.md",
           "format": "{content}\n"
         }
-      }
+      },
+      "_comment": "This output profile maps weave.type and weave.content to Frank's journal and inbox destinations. Copy and rename it to create a different filing scheme."
     }
-  }
+  },
+  "_comment_profiles": "Create your own named weave and out profiles by copying these examples and changing their provider, prompt, packet-field mappings, and destinations."
 }

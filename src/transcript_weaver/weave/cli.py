@@ -81,7 +81,13 @@ def run(
         stdout.write(json.dumps(enriched, ensure_ascii=False, indent=2) + "\n")
         invocation.close(success=True)
         return 0
-    except (ConfigurationError, RunIdError, ValueError, json.JSONDecodeError, WeaveError) as exc:
+    except (
+        ConfigurationError,
+        RunIdError,
+        ValueError,
+        json.JSONDecodeError,
+        WeaveError,
+    ) as exc:
         if invocation is not None:
             invocation.log.exception(type(exc).__name__)
             invocation.close(success=False)

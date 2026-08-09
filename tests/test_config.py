@@ -153,11 +153,27 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     config = load_or_create_config(app_paths)
     prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
     assert prompt_path.read_bytes() == packaged_example_prompt_bytes()
-    assert "dream|gratitude|dss|sacred|unknown" in prompt_path.read_text()
+    assert "dream|gratitude|ses|sacred|unknown" in prompt_path.read_text()
     vault = config.out["example-journals"]["vault"]
     assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
     stored = json.loads(app_paths.config_file.read_text())
     assert stored["out"]["example-journals"]["vault"]["_comment"]
+    assert set(config.weave) == {"franks-example"}
+    destinations = config.out["example-journals"]["destinations"]
+    assert {
+        name: destination.get("file", destination.get("directory"))
+        for name, destination in destinations.items()
+    } == {
+        "gratitude": "Gratitude Journal.md",
+        "dream": "Dream Journal.md",
+        "ses": "SEs Journal.md",
+        "sacred": "Sacred Journey.md",
+        "unknown": "00 Inbox",
+    }
+    assert destinations["unknown"]["filename"] == "unknown-{date}-{time}.md"
+    prompt = prompt_path.read_text()
+    assert "around 72 characters" in prompt
+    assert "greater than 300" in prompt
 
 
 def test_first_run_never_overwrites_existing_example_prompt(
@@ -196,8 +212,8 @@ def test_top_level_configuration_error_lists_missing_and_unrecognized_fields(
             "providers.gemini has unrecognized fields: unexpected",
         ),
         (
-            lambda value: value["weave"]["transcript-cleanup"].pop("prompt_file"),
-            "weave.transcript-cleanup must contain exactly one of prompt or prompt_file",
+            lambda value: value["weave"]["franks-example"].pop("prompt_file"),
+            "weave.franks-example must contain exactly one of prompt or prompt_file",
         ),
         (
             lambda value: value["out"]["example-journals"]["packet_fields"].pop("content"),
@@ -257,6 +273,6 @@ def test_existing_default_config_recreates_only_missing_referenced_prompt(
 
 def test_weave_profile_rejects_unknown_provider(tmp_path: Path) -> None:
     value = json.loads(packaged_default_config_bytes())
-    value["weave"]["transcript-cleanup"]["provider"] = "missing-provider"
+    value["weave"]["franks-example"]["provider"] = "missing-provider"
     with pytest.raises(ConfigurationError, match="Available providers: gemini"):
         validate_config(value, path=tmp_path / "config.json")

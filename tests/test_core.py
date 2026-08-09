@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from transcript_weaver import __version__
 from transcript_weaver.config import ApplicationPaths
 from transcript_weaver.inp import cli
 from transcript_weaver.inp.errors import ExitStatus, SourceUnavailableError, TranscriptNotFoundError
@@ -28,6 +29,7 @@ def test_packet_contract_and_deterministic_serialization() -> None:
     packet = TranscriptPacket.from_acquired(acquired, run_id="20260728-113045-a1b2")
     assert packet.as_dict() == {
         "schema_version": 1,
+        "trw_version": __version__,
         "run": {"id": "20260728-113045-a1b2"},
         "datetime": "2026-07-28T11:30:45Z",
         "source": {"type": "file", "name": "notes.txt", "reference": "/safe/notes.txt"},
@@ -198,7 +200,11 @@ def test_downstream_placeholders_preserve_or_generate_run_for_logging(
 ) -> None:
     for module, stage in ((weave_cli, "trweave"), (out_cli, "trwout")):
         paths = ApplicationPaths(tmp_path / stage / "config.json", tmp_path / stage / "log")
-        packet = {"schema_version": 1, "run": {"id": "20260728-120000-a1b2"}}
+        packet = {
+            "schema_version": 1,
+            "trw_version": __version__,
+            "run": {"id": "20260728-120000-a1b2"},
+        }
         stdout, stderr = io.StringIO(), io.StringIO()
         assert (
             module.run(
@@ -219,7 +225,7 @@ def test_downstream_placeholders_preserve_or_generate_run_for_logging(
         )
         module.run(
             ["missing", "--log"],
-            stdin=io.StringIO(json.dumps({"schema_version": 1})),
+            stdin=io.StringIO(json.dumps({"schema_version": 1, "trw_version": __version__})),
             paths=generated_paths,
         )
         names = [path.name for path in generated_paths.log_directory.glob("*.log")]
@@ -267,11 +273,13 @@ def test_mocked_otter_preserves_identity_and_converts_to_utc() -> None:
         "Jul 28, 2026 at 11:30 AM",
         "Morning note",
         "https://otter.ai/u/opaque-recording-id",
+        301.5,
     )
     pacific = timezone(timedelta(hours=-7))
     acquired = OtterSource(FakeClient(capture), local_timezone=pacific).acquire()
     assert acquired.recorded_at == datetime(2026, 7, 28, 18, 30, tzinfo=timezone.utc)
     assert acquired.source.reference == capture.url
+    assert acquired.duration_seconds == 301.5
 
 
 @pytest.mark.parametrize(

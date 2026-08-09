@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from transcript_weaver import __version__
 from transcript_weaver.config import (
     ApplicationPaths,
     ConfigurationError,
@@ -42,14 +43,14 @@ def base_config(vault: str = "vault") -> dict[str, Any]:
         for name, file in {
             "gratitude": "Gratitude Journal.md",
             "dream": "Dream Journal.md",
-            "dss": "DSS Chronicles.md",
-            "sacred": "Sacred Journey Journal.md",
+            "ses": "SEs Journal.md",
+            "sacred": "Sacred Journey.md",
         }.items()
     }
     destinations["unknown"] = {
         "operation": "create",
         "directory": "00 Inbox",
-        "filename": "{date}-{time}-unknown.md",
+        "filename": "unknown-{date}-{time}.md",
         "format": "{content}\n",
     }
     return {
@@ -83,6 +84,7 @@ def paths_with_config(tmp_path: Path, value: dict[str, Any] | None = None) -> Ap
 def packet(dt: str = "2026-08-05T08:30:00Z") -> dict[str, Any]:
     return {
         "schema_version": 1,
+        "trw_version": __version__,
         "run": {"id": RUN},
         "datetime": dt,
         "source": {"type": "otter", "name": "Note"},
@@ -98,7 +100,7 @@ def test_casefold_duplicates_and_lookup(tmp_path: Path) -> None:
         validate_config(value, path=tmp_path / "c")
     assert find_profile({"Hello": 1}, "hello", kind="x") == ("Hello", 1)
     with pytest.raises(ConfigurationError, match="Did you mean"):
-        find_profile({"transcript-cleanup": {}}, "transcript-cleanu", kind="weave")
+        find_profile({"franks-example": {}}, "franks-exampl", kind="weave")
     with pytest.raises(
         ConfigurationError,
         match=r"Unknown weave profile .wildly-wrong..*Available profiles: Cleanup",
@@ -224,6 +226,62 @@ def test_weave_cli_success_and_secret_safe_log(tmp_path: Path) -> None:
     assert "JSON-to-JSON" in fake.calls[0][0] and fake.calls[0][1] == "Clean safely"
 
 
+@pytest.mark.parametrize(
+    ("duration", "expected"),
+    [(300, "gratitude"), (300.001, "unknown")],
+)
+def test_reliable_duration_deterministically_routes_long_recordings(
+    tmp_path: Path, duration: float, expected: str
+) -> None:
+    paths = paths_with_config(tmp_path)
+    source = packet()
+    source["metadata"]["duration_seconds"] = duration
+    stdout = io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup"],
+            stdin=io.StringIO(json.dumps(source)),
+            stdout=stdout,
+            paths=paths,
+            provider=FakeProvider("gratitude", "- Still cleaned"),
+        )
+        == 0
+    )
+    result = json.loads(stdout.getvalue())
+    assert result["weave"] == {"type": expected, "content": "- Still cleaned"}
+    assert result["metadata"]["duration_seconds"] == duration
+
+
+def test_packet_version_is_informational_and_never_a_compatibility_gate(
+    tmp_path: Path,
+) -> None:
+    paths = paths_with_config(tmp_path)
+    for value in (None, "0.1.0007", "future-version", 10001):
+        source = packet()
+        if value is None:
+            del source["trw_version"]
+        else:
+            source["trw_version"] = value
+        stdout, stderr = io.StringIO(), io.StringIO()
+        assert (
+            weave_cli.run(
+                ["cleanup"],
+                stdin=io.StringIO(json.dumps(source)),
+                stdout=stdout,
+                stderr=stderr,
+                paths=paths,
+                provider=FakeProvider(),
+            )
+            == 0
+        )
+        result = json.loads(stdout.getvalue())
+        if value is None:
+            assert "trw_version" not in result
+        else:
+            assert result["trw_version"] == value
+        assert stderr.getvalue() == ""
+
+
 def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ProviderError):
         build_provider("other", {})
@@ -265,7 +323,9 @@ def test_insert_order_and_duplicate_warning(tmp_path: Path) -> None:
     updated, duplicate = insert_chronologically(
         updated, "2026-08-05", "## 2026-08-05\n\nsecond\n\n"
     )
-    assert duplicate and updated.index("mid") < updated.index("second") < updated.index("later")
+    assert duplicate and updated.index("mid") < updated.index("---") < updated.index(
+        "second"
+    ) < updated.index("later")
 
 
 def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) -> None:
@@ -290,9 +350,9 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
         )
         == 0
     )
-    assert "keeping both" in stderr.getvalue() and journal.read_text().index(
-        "first"
-    ) < journal.read_text().index("second")
+    assert "2026-08-05" in stderr.getvalue() and "keeping both" in stderr.getvalue()
+    text = journal.read_text()
+    assert text.index("first") < text.index("---") < text.index("second")
     value = base_config()
     value["out"]["Journals"]["destinations"]["gratitude"] = {
         "operation": "append",
@@ -332,8 +392,8 @@ def test_end_to_end_five_categories(tmp_path: Path) -> None:
     expected_files = {
         "gratitude": "Gratitude Journal.md",
         "dream": "Dream Journal.md",
-        "dss": "DSS Chronicles.md",
-        "sacred": "Sacred Journey Journal.md",
+        "ses": "SEs Journal.md",
+        "sacred": "Sacred Journey.md",
         "unknown": "00 Inbox",
     }
     for category, expected in expected_files.items():

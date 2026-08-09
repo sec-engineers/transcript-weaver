@@ -91,7 +91,7 @@ def insert_chronologically(existing: str, entry_date: str, block: str) -> tuple[
         later = next((m for m in matches if m.start() > last.start()), None)
         at = later.start() if later else len(existing)
         before, after = existing[:at].rstrip(), existing[at:].lstrip()
-        return before + "\n\n" + block + after, True
+        return before + "\n\n---\n\n" + block + after, True
     later = next((m for m in matches if m.group(1) > entry_date), None)
     if later:
         before, after = existing[: later.start()].rstrip(), existing[later.start() :].lstrip()
