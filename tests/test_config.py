@@ -167,7 +167,9 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     assert raw_config.index('"_comment"', output_start) < raw_config.index(
         '"timezone"', output_start
     )
-    destinations = config.out["franks-example"]["destinations"]
+    output_profile = config.out["franks-example"]
+    assert output_profile["destination_roots"] == {"journals": "10 DSS/2026-2027 DSS6"}
+    destinations = output_profile["destinations"]
     assert {
         name: destination.get("file", destination.get("directory"))
         for name, destination in destinations.items()
@@ -178,7 +180,12 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
         "sacred": "Sacred Journey.md",
         "unknown": "00 Inbox",
     }
+    assert all(
+        destinations[name]["root"] == "journals" for name in ("gratitude", "dream", "ses", "sacred")
+    )
+    assert "root" not in destinations["unknown"]
     assert destinations["unknown"]["filename"] == "unknown-{date}-{time}.md"
+    assert destinations["unknown"]["format"].startswith("## {date}")
     prompt = prompt_path.read_text()
     assert "around 72 characters" in prompt
     assert "greater than 300" in prompt

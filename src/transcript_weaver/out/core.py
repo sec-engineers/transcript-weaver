@@ -57,14 +57,17 @@ def _atomic_create(path: Path, content: str) -> None:
 
 
 def _safe_target(vault: Path, relative: str) -> Path:
+    """Resolve a destination path relative to, and contained by, its vault."""
     candidate = Path(relative)
     if candidate.is_absolute():
-        raise OutputError("Destination paths must be relative to the configured vault.")
+        raise OutputError(
+            "Destination files and directories must be relative to the configured vault."
+        )
     target = (vault / candidate).resolve(strict=False)
     try:
         target.relative_to(vault)
     except ValueError as exc:
-        raise OutputError("Destination path escapes the configured vault.") from exc
+        raise OutputError("Destination file or directory escapes the configured vault.") from exc
     return target
 
 
@@ -163,10 +166,11 @@ def persist(
     except ConfigurationError as exc:
         raise OutputError(str(exc)) from exc
     required = {"timezone", "vault", "packet_fields", "destinations"}
-    if set(profile) != required:
+    optional = {"destination_roots"}
+    if not required <= set(profile) or set(profile) - required - optional:
         raise OutputError(
-            f"Output profile {profile_name!r} must contain exactly timezone, vault, "
-            "packet_fields, and destinations."
+            f"Output profile {profile_name!r} must contain timezone, vault, "
+            "packet_fields, and destinations, with optional destination_roots."
         )
     timezone_name = profile["timezone"]
     if not isinstance(timezone_name, str):
@@ -221,12 +225,38 @@ def persist(
     vault = resolve_configured_path(
         profile["vault"], config_file=paths.config_file, field=f"out.{profile_name}.vault"
     )
+    target_root = vault
+    selected_root = destination.get("root")
+    if selected_root is not None:
+        roots = profile.get("destination_roots", {})
+        if not isinstance(selected_root, str) or not isinstance(roots, Mapping):
+            raise OutputError(f"Destination {destination_name!r} has an invalid root.")
+        match = next(
+            (
+                value
+                for name, value in roots.items()
+                if isinstance(name, str) and name.casefold() == selected_root.casefold()
+            ),
+            None,
+        )
+        if match is None:
+            available = ", ".join(sorted(str(name) for name in roots)) or "none configured"
+            raise OutputError(
+                f"Destination {destination_name!r} names unknown destination root "
+                f"{selected_root!r}. Available destination roots: {available}."
+            )
+        if not isinstance(match, str) or not match.strip():
+            raise OutputError(f"Destination root {selected_root!r} must be a nonempty string.")
+        target_root = _safe_target(vault, match)
     if operation in {"insert", "append"}:
-        if set(destination) != {"operation", "file", "format"} or not isinstance(
-            destination.get("file"), str
+        allowed = {"operation", "file", "format", "root"}
+        if (
+            set(destination) - allowed
+            or not {"operation", "file", "format"} <= set(destination)
+            or not isinstance(destination.get("file"), str)
         ):
             raise OutputError(f"Destination {destination_name!r} is invalid for {operation}.")
-        target = _safe_target(vault, destination["file"])
+        target = _safe_target(target_root, destination["file"])
         try:
             existing = target.read_text(encoding="utf-8") if target.exists() else ""
         except (OSError, UnicodeError) as exc:
@@ -239,14 +269,16 @@ def persist(
             rendered_content = existing + rendered
         _atomic_replace(target, rendered_content)
     elif operation == "create":
+        allowed = {"operation", "directory", "filename", "format", "root"}
         if (
-            set(destination) != {"operation", "directory", "filename", "format"}
+            set(destination) - allowed
+            or not {"operation", "directory", "filename", "format"} <= set(destination)
             or not isinstance(destination.get("directory"), str)
             or not isinstance(destination.get("filename"), str)
         ):
             raise OutputError(f"Destination {destination_name!r} is invalid for create.")
         filename = _format(destination["filename"], date=date, time=time_value, content=content)
-        target = _safe_target(vault, str(Path(destination["directory"]) / filename))
+        target = _safe_target(target_root, str(Path(destination["directory"]) / filename))
         _atomic_create(target, rendered)
     else:
         raise OutputError(f"Unsupported output operation {operation!r}.")

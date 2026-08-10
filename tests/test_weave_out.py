@@ -14,7 +14,12 @@ from transcript_weaver.config import (
     validate_config,
 )
 from transcript_weaver.out import cli as out_cli
-from transcript_weaver.out.core import insert_chronologically, persist, soft_wrap_markdown
+from transcript_weaver.out.core import (
+    OutputError,
+    insert_chronologically,
+    persist,
+    soft_wrap_markdown,
+)
 from transcript_weaver.profiles import extract_dotted, find_profile, resolve_configured_path
 from transcript_weaver.weave import cli as weave_cli
 from transcript_weaver.weave.core import WeaveError, resolve_prompt, validate_response
@@ -472,6 +477,126 @@ def test_output_cli_timezone_duplicate_append_create_and_safety(tmp_path: Path) 
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 1
 
 
+def test_destinations_are_resolved_relative_to_common_vault(tmp_path: Path) -> None:
+    value = base_config()
+    profile = value["out"]["Journals"]
+    profile["destinations"]["gratitude"]["file"] = "Journals/Gratitude Journal.md"
+    paths = paths_with_config(tmp_path, value)
+    config = load_or_create_config(paths)
+
+    enriched = packet()
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "thankful"}
+    _, journal = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert journal == (paths.config_file.parent / "vault" / "Journals" / "Gratitude Journal.md")
+
+    enriched["weave"] = {"type": "unknown", "update_transcript": "unclassified"}
+    _, unknown = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert unknown.parent == paths.config_file.parent / "vault" / "00 Inbox"
+
+
+def test_reusable_destination_roots_and_vault_level_unknown(tmp_path: Path) -> None:
+    value = base_config()
+    profile = value["out"]["Journals"]
+    profile["destination_roots"] = {"Journals": "some/long/journal/path"}
+    for name in ("gratitude", "dream", "ses", "sacred"):
+        profile["destinations"][name]["root"] = "journals"
+    profile["destinations"]["unknown"]["format"] = "## {date}\n\n{content}\n\n"
+    paths = paths_with_config(tmp_path, value)
+    config = load_or_create_config(paths)
+    vault = paths.config_file.parent / "vault"
+
+    for category, filename in {
+        "gratitude": "Gratitude Journal.md",
+        "dream": "Dream Journal.md",
+        "ses": "SEs Journal.md",
+        "sacred": "Sacred Journey.md",
+    }.items():
+        enriched = packet()
+        enriched["weave"] = {"type": category, "update_transcript": category}
+        _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+        assert target == vault / "some" / "long" / "journal" / "path" / filename
+
+    enriched = packet()
+    enriched["weave"] = {"type": "unknown", "update_transcript": "unclassified"}
+    _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert target.parent == vault / "00 Inbox"
+    assert target.read_text().startswith("## 2026-08-05\n\nunclassified")
+
+
+def test_destination_root_resolving_outside_vault_is_rejected(tmp_path: Path) -> None:
+    value = base_config()
+    profile = value["out"]["Journals"]
+    profile["destination_roots"] = {"journals": "linked"}
+    profile["destinations"]["gratitude"]["root"] = "journals"
+    paths = paths_with_config(tmp_path, value)
+    vault = paths.config_file.parent / "vault"
+    vault.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (vault / "linked").symlink_to(outside, target_is_directory=True)
+    config = load_or_create_config(paths)
+    enriched = packet()
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "thankful"}
+    with pytest.raises(OutputError, match="escapes the configured vault"):
+        persist(enriched, "journals", config, paths, warn=lambda _: None)
+
+
+def test_destination_root_validation_and_case_insensitive_lookup(tmp_path: Path) -> None:
+    value = base_config()
+    profile = value["out"]["Journals"]
+    profile["destination_roots"] = {"Journals": "nested"}
+    profile["destinations"]["gratitude"]["root"] = "jOuRnAlS"
+    paths = paths_with_config(tmp_path, value)
+    config = load_or_create_config(paths)
+    enriched = packet()
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "thankful"}
+    _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert target == paths.config_file.parent / "vault" / "nested" / "Gratitude Journal.md"
+
+    for bad_root, message in [
+        ("/absolute", "relative path beneath"),
+        (r"C:\absolute", "relative path beneath"),
+        ("../escape", "must not use '..'"),
+        ("", "nonempty string"),
+        (3, "nonempty string"),
+    ]:
+        bad = base_config()
+        bad["out"]["Journals"]["destination_roots"] = {"journals": bad_root}
+        with pytest.raises(ConfigurationError, match=message):
+            validate_config(bad, path=tmp_path / "config.json")
+
+    normalized = base_config()
+    normalized["out"]["Journals"]["destination_roots"] = {"journals": "archive/../nested"}
+    validate_config(normalized, path=tmp_path / "config.json")
+
+    unknown = base_config()
+    unknown["out"]["Journals"]["destination_roots"] = {"journals": "nested"}
+    unknown["out"]["Journals"]["destinations"]["gratitude"]["root"] = "missing"
+    with pytest.raises(ConfigurationError, match="unknown destination root 'missing'"):
+        validate_config(unknown, path=tmp_path / "config.json")
+
+    duplicate = base_config()
+    duplicate["out"]["Journals"]["destination_roots"] = {
+        "Journals": "one",
+        "journals": "two",
+    }
+    with pytest.raises(ConfigurationError, match="differ only by case"):
+        validate_config(duplicate, path=tmp_path / "config.json")
+
+
+def test_profile_without_destination_roots_remains_backward_compatible(
+    tmp_path: Path,
+) -> None:
+    value = base_config()
+    assert "destination_roots" not in value["out"]["Journals"]
+    paths = paths_with_config(tmp_path, value)
+    config = load_or_create_config(paths)
+    enriched = packet()
+    enriched["weave"] = {"type": "dream", "update_transcript": "dream"}
+    _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+    assert target == paths.config_file.parent / "vault" / "Dream Journal.md"
+
+
 def test_timezone_crosses_date_and_dst(tmp_path: Path) -> None:
     paths = paths_with_config(tmp_path)
     config = load_or_create_config(paths)
@@ -615,6 +740,12 @@ def test_packaged_output_profile_creates_inspectable_cwd_journal(
         warn=lambda _: None,
     )
     assert operation == "insert"
-    assert target == run_directory / "transcript-weaver-test-output" / "Dream Journal.md"
+    assert target == (
+        run_directory
+        / "transcript-weaver-test-output"
+        / "10 DSS"
+        / "2026-2027 DSS6"
+        / "Dream Journal.md"
+    )
     assert target.read_text() == "## 2026-08-05\n\nA prototype dream.\n\n"
     assert (paths.config_file.parent / "prompts" / "example.md").exists()

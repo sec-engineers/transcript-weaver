@@ -9,7 +9,7 @@ import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from importlib import resources
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from platformdirs import PlatformDirs
@@ -205,7 +205,43 @@ def _validate_weave(weave: dict[str, dict[str, Any]], *, path: Path) -> None:
             _validate_path(profile["prompt_file"], context=f"{context}.prompt_file")
 
 
-def _validate_destinations(value: Any, *, context: str) -> None:
+def _validate_destination_roots(value: Any, *, context: str) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ConfigurationError(f"{context} must be a JSON object.")
+    roots: dict[str, str] = {}
+    seen: dict[str, str] = {}
+    for name, raw_path in value.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigurationError(f"{context} names must be nonempty strings.")
+        folded = name.casefold()
+        if folded in seen:
+            raise ConfigurationError(
+                f"{context} names {seen[folded]!r} and {name!r} differ only by case."
+            )
+        seen[folded] = name
+        relative = _nonempty_string(raw_path, context=f"{context}.{name}")
+        candidate = Path(relative)
+        if candidate.is_absolute() or PureWindowsPath(relative).is_absolute():
+            raise ConfigurationError(
+                f"{context}.{name} must be a relative path beneath the resolved vault."
+            )
+        depth = 0
+        for part in candidate.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                if depth == 0:
+                    raise ConfigurationError(
+                        f"{context}.{name} must not use '..' to escape the resolved vault."
+                    )
+                depth -= 1
+            else:
+                depth += 1
+        roots[folded] = name
+    return roots
+
+
+def _validate_destinations(value: Any, *, context: str, destination_roots: dict[str, str]) -> None:
     if not isinstance(value, dict) or not value:
         raise ConfigurationError(f"{context} must be a nonempty JSON object.")
     seen: dict[str, str] = {}
@@ -226,6 +262,7 @@ def _validate_destinations(value: Any, *, context: str) -> None:
             fields = _require_fields(
                 destination,
                 required={"operation", "file", "format"},
+                optional={"root"},
                 context=item_context,
             )
             _nonempty_string(fields["file"], context=f"{item_context}.file")
@@ -233,6 +270,7 @@ def _validate_destinations(value: Any, *, context: str) -> None:
             fields = _require_fields(
                 destination,
                 required={"operation", "directory", "filename", "format"},
+                optional={"root"},
                 context=item_context,
             )
             _nonempty_string(fields["directory"], context=f"{item_context}.directory")
@@ -242,6 +280,14 @@ def _validate_destinations(value: Any, *, context: str) -> None:
                 f"{item_context}.operation must be 'insert', 'append', or 'create'."
             )
         _nonempty_string(fields["format"], context=f"{item_context}.format")
+        if "root" in fields:
+            root_name = _nonempty_string(fields["root"], context=f"{item_context}.root")
+            if root_name.casefold() not in destination_roots:
+                available = ", ".join(sorted(destination_roots.values())) or "none configured"
+                raise ConfigurationError(
+                    f"{item_context}.root names unknown destination root {root_name!r}. "
+                    f"Available destination roots: {available}."
+                )
 
 
 def _validate_out(out: dict[str, dict[str, Any]], *, path: Path) -> None:
@@ -250,6 +296,7 @@ def _validate_out(out: dict[str, dict[str, Any]], *, path: Path) -> None:
         fields = _require_fields(
             profile,
             required={"timezone", "vault", "packet_fields", "destinations"},
+            optional={"destination_roots"},
             context=context,
         )
         _nonempty_string(fields["timezone"], context=f"{context}.timezone")
@@ -261,7 +308,15 @@ def _validate_out(out: dict[str, dict[str, Any]], *, path: Path) -> None:
         )
         _nonempty_string(packet_fields["category"], context=f"{context}.packet_fields.category")
         _nonempty_string(packet_fields["content"], context=f"{context}.packet_fields.content")
-        _validate_destinations(fields["destinations"], context=f"{context}.destinations")
+        roots = _validate_destination_roots(
+            fields.get("destination_roots", {}),
+            context=f"{context}.destination_roots",
+        )
+        _validate_destinations(
+            fields["destinations"],
+            context=f"{context}.destinations",
+            destination_roots=roots,
+        )
 
 
 def validate_config(value: Any, *, path: Path) -> AppConfig:

@@ -118,22 +118,46 @@ A coherent configuration looks like this:
     "franks-example": {
       "timezone": "America/Los_Angeles",
       "vault": {
-        "_comment": "Use relative_to cwd or config for relative paths; omit it for absolute or ~ paths.",
         "path": "transcript-weaver-test-output",
         "relative_to": "cwd"
       },
-      "packet_fields": {"category": "weave.type", "content": "weave.update_transcript"},
+      "packet_fields": {
+        "category": "weave.type",
+        "content": "weave.update_transcript"
+      },
+      "destination_roots": {
+        "journals": "10 DSS/2026-2027 DSS6"
+      },
       "destinations": {
         "gratitude": {
           "operation": "insert",
+          "root": "journals",
           "file": "Gratitude Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "dream": {
+          "operation": "insert",
+          "root": "journals",
+          "file": "Dream Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "ses": {
+          "operation": "insert",
+          "root": "journals",
+          "file": "SEs Journal.md",
+          "format": "## {date}\n\n{content}\n\n"
+        },
+        "sacred": {
+          "operation": "insert",
+          "root": "journals",
+          "file": "Sacred Journey.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "unknown": {
           "operation": "create",
           "directory": "00 Inbox",
           "filename": "unknown-{date}-{time}.md",
-          "format": "{content}\n"
+          "format": "## {date}\n\n{content}\n\n"
         }
       }
     }
@@ -148,8 +172,31 @@ Path objects use `path` plus `relative_to: "cwd"` or `relative_to: "config"` for
 relative paths. For an absolute path such as `/mnt/d/Notes` or a home-relative path
 such as `~/Obsidian/Notes`, omit `relative_to`. Existing path strings remain supported
 for compatibility. Keys beginning with `_comment` are embedded documentation and are
-ignored; other unexpected keys are rejected. Destination paths may not escape the
-vault.
+ignored; other unexpected keys are rejected.
+
+Each output profile’s `vault` is the common root for all its destinations.
+An optional `destination_roots` object defines reusable relative paths beneath the
+resolved vault. A destination selects a root with its explicit `root` field; root
+names are matched case-insensitively, and names differing only by case are rejected.
+Unknown root names produce an error listing the available roots. Placeholder forms
+such as `{journals}` are not supported.
+
+Resolution with a selected root is:
+
+```text
+vault + destination root + destination file/directory
+```
+
+When `root` is omitted, the backward-compatible resolution is:
+
+```text
+vault + destination file/directory
+```
+
+Destination roots, files, and directories must be relative. They cannot escape the
+resolved vault with `..` or by resolving through a link to a location outside it.
+In the example, the four journals are under `vault/10 DSS/2026-2027 DSS6`; the unrooted unknown
+destination remains under the vault-level `00 Inbox`.
 
 ## Weaving
 
@@ -180,9 +227,9 @@ only formatting placeholders.
 - `append` atomically appends the configured rendered text.
 - `create` creates a standalone file atomically and refuses to overwrite one.
 
-The example journal names follow the prototype: `Dream Journal.md`,
-`Gratitude Journal.md`, `SEs Journal.md`, and `Sacred Journey.md`.
-Unknown material is routed to `00 Inbox` as
+The example stores `Dream Journal.md`, `Gratitude Journal.md`, `SEs Journal.md`,
+and `Sacred Journey.md` beneath the configured vault-relative journal root. Unknown
+material is routed to the vault-relative `00 Inbox` directory as
 `unknown-{date}-{time}.md`. The packaged prompt asks for approximately 72-character
 word-boundary wrapping while keeping long-form unknown content substantially verbatim.
 

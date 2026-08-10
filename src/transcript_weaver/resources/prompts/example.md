@@ -66,6 +66,7 @@ Apply these prototype corrections when context supports them:
 - `Kathy` -> `Cathy`
 - `Blue` or `Blu`, when referring to the university -> `BLU`
 - `Charlie`, when referring to Frank's son -> `Charley`
+- `tribez`, when referring to a game -> Tribez
 
 Formatting:
 

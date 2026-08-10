@@ -37,7 +37,10 @@
       "timezone": "America/Los_Angeles",
       "vault": {
         "_comment": [
-          "Relative paths require relative_to set to cwd or config.",
+          "This is the common root for every destination.",
+          "Every destination root, file, and directory is relative",
+          "to this vault.",
+          "Use relative_to only for relative vault paths.",
           "Omit relative_to for absolute paths and paths beginning",
           "with ~."
         ],
@@ -59,30 +62,43 @@
         "category": "weave.type",
         "content": "weave.update_transcript"
       },
+      "destination_roots": {
+        "_comment": [
+          "Reusable destination roots are relative to vault.",
+          "A destination selects one by name using its root field."
+        ],
+        "journals": "SubDir1/SubDir2"
+      },
       "destinations": {
         "_comment": [
-          "Insert places a date heading and content in",
-          "chronological order. Duplicate dates get a separator",
-          "and stderr warning. Create writes one new file.",
+          "Files and directories are relative to their selected root.",
+          "Destinations without root are relative directly to vault.",
+          "Insert places a date heading and content in chronological",
+          "order. Duplicate dates get a separator and stderr warning.",
+          "Create writes one new file without overwriting another.",
           "Supported placeholders are date, time, and content."
         ],
         "gratitude": {
           "operation": "insert",
+          "root": "journals",
           "file": "Gratitude Journal.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "dream": {
           "operation": "insert",
+          "root": "journals",
           "file": "Dream Journal.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "ses": {
           "operation": "insert",
+          "root": "journals",
           "file": "SEs Journal.md",
           "format": "## {date}\n\n{content}\n\n"
         },
         "sacred": {
           "operation": "insert",
+          "root": "journals",
           "file": "Sacred Journey.md",
           "format": "## {date}\n\n{content}\n\n"
         },
@@ -90,7 +106,7 @@
           "operation": "create",
           "directory": "00 Inbox",
           "filename": "unknown-{date}-{time}.md",
-          "format": "{content}\n"
+          "format": "## {date}\n\n{content}\n\n"
         }
       }
     }

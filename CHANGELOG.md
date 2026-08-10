@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added optional, case-insensitive, vault-contained `destination_roots` for
+  reusable output paths while preserving unrooted destination behavior.
 - Renamed the packaged output profile to `franks-example`, reorganized and
   wrapped configuration comments for terminal editors, improved malformed input
   guidance, and added Markdown-aware 72-column output wrapping.
