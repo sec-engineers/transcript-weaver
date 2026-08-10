@@ -116,7 +116,7 @@ def run(
                 invocation.warning(
                     f"could not save packet-preservation diagnostics: {artifact_error}"
                 )
-            invocation.log.exception(type(exc).__name__)
+            invocation.log.exception(f"{type(exc).__name__}: {exc}")
             invocation.close(success=False)
         print(f"trweave: {exc}", file=stderr)
         return 1
@@ -128,7 +128,7 @@ def run(
         WeaveError,
     ) as exc:
         if invocation is not None:
-            invocation.log.exception(type(exc).__name__)
+            invocation.log.exception(f"{type(exc).__name__}: {exc}")
             invocation.close(success=False)
         print(f"trweave: {exc}", file=stderr)
         return 1

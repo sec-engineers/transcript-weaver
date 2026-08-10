@@ -63,7 +63,7 @@ def base_config(vault: str = "vault") -> dict[str, Any]:
         "logging": {"retained_runs": 5},
         "providers": {
             "Gemini": {
-                "model": "gemini-2.5-flash-lite",
+                "model": "gemini-3.5-flash-lite",
                 "credential": {"source": "pass", "name": "api/gemini"},
             }
         },
@@ -336,6 +336,32 @@ def test_packet_version_is_informational_and_never_a_compatibility_gate(
         assert stderr.getvalue() == ""
 
 
+def quota_error(*, code: int = 429) -> urllib.error.HTTPError:
+    body = {
+        "error": {
+            "code": code,
+            "message": "You exceeded quota using SECRET.",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "violations": [
+                        {
+                            "quotaMetric": "generate_content_free_tier_requests",
+                            "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                            "quotaDimensions": {"model": "gemini-3.5-flash-lite"},
+                            "quotaValue": "500",
+                        }
+                    ]
+                },
+                {"retryDelay": "123s"},
+            ],
+        }
+    }
+    return urllib.error.HTTPError(
+        "https://redacted", code, "limited", {}, io.BytesIO(json.dumps(body).encode())
+    )
+
+
 def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ProviderError):
         build_provider("other", {})
@@ -362,8 +388,11 @@ def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> 
     def opener(*args, **kwargs):
         nonlocal calls
         calls += 1
+        request = args[0]
+        payload = json.loads(request.data)
+        assert payload["generationConfig"] == {"responseMimeType": "application/json"}
         if calls < 5:
-            raise urllib.error.HTTPError("https://redacted", 429, "limited", {}, None)
+            raise quota_error()
         return Response()
 
     live = GeminiProvider(
@@ -376,6 +405,11 @@ def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> 
     assert live.transform("s", "p", "{}") == "{}" and calls == 5
     assert delays == [1.0, 4.0, 9.0, 16.0]
     assert len(retries) == 4
+    assert "daily request limit exceeded" in retries[0]
+    assert "model gemini-3.5-flash-lite" in retries[0]
+    assert "limit 500" in retries[0]
+    assert "Google recommends retrying after 123s" in retries[0]
+    assert "SECRET" not in "".join(retries)
     assert "retry 1 of 4 in 1 seconds" in retries[0]
     assert "retry 4 of 4 in 16 seconds" in retries[-1]
 
@@ -417,6 +451,56 @@ def test_retry_warning_reaches_stderr_and_enabled_log(
     logs = list(paths.log_directory.glob("*-trweave.log"))
     assert len(logs) == 1
     assert message in logs[0].read_text()
+
+
+def test_final_provider_reason_reaches_stderr_and_enabled_log(tmp_path: Path) -> None:
+    paths = paths_with_config(tmp_path)
+
+    class FailingProvider:
+        model = "gemini-3.5-flash-lite"
+
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            raise ProviderError(
+                "Gemini request failed with HTTP status 429: "
+                "daily request limit exceeded (model gemini-3.5-flash-lite, limit 500)."
+            )
+
+    stderr = io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup", "--log"],
+            stdin=io.StringIO(json.dumps(packet())),
+            stdout=io.StringIO(),
+            stderr=stderr,
+            paths=paths,
+            provider=FailingProvider(),
+        )
+        == 1
+    )
+    reason = "daily request limit exceeded"
+    assert reason in stderr.getvalue()
+    logs = list(paths.log_directory.glob("*-trweave.log"))
+    assert len(logs) == 1
+    assert reason in logs[0].read_text()
+
+
+def test_final_http_error_extracts_bounded_quota_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(GeminiProvider, "_secret", lambda self: "SECRET")
+
+    def opener(*args: object, **kwargs: object) -> object:
+        raise quota_error()
+
+    provider = GeminiProvider("gemini-3.5-flash-lite", "n", opener=opener, max_attempts=1)
+    with pytest.raises(ProviderError) as captured:
+        provider.transform("system", "prompt", "{}")
+    message = str(captured.value)
+    assert "daily request limit exceeded" in message
+    assert "model gemini-3.5-flash-lite" in message
+    assert "limit 500" in message
+    assert "retrying after 123s" in message
+    assert "SECRET" not in message
 
 
 def test_insert_order_and_duplicate_warning(tmp_path: Path) -> None:

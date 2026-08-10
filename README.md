@@ -104,7 +104,7 @@ A coherent configuration looks like this:
   "logging": {"retained_runs": 5},
   "providers": {
     "gemini": {
-      "model": "gemini-2.5-flash-lite",
+      "model": "gemini-3.5-flash-lite",
       "credential": {"source": "pass", "name": "api/gemini"}
     }
   },

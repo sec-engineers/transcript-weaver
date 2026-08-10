@@ -158,6 +158,7 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
     stored = json.loads(app_paths.config_file.read_text())
     assert stored["out"]["franks-example"]["vault"]["_comment"]
+    assert config.providers["gemini"]["model"] == "gemini-3.5-flash-lite"
     assert set(config.weave) == {"franks-example"}
     assert set(config.out) == {"franks-example"}
     raw_config = app_paths.config_file.read_text()

@@ -21,7 +21,7 @@ def test_live_gemini_small_safe_transformation() -> None:
         "transcript": "I am grateful for a sunny day.",
         "metadata": {},
     }
-    provider = GeminiProvider("gemini-2.5-flash-lite", "api/gemini")
+    provider = GeminiProvider("gemini-3.5-flash-lite", "api/gemini")
     response = provider.transform(
         SYSTEM_INSTRUCTION,
         "Add a top-level weave object with type='gratitude' and a short update_transcript "

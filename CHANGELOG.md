@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Migrated the packaged provider to Gemini 3.5 Flash-Lite, removed the
+  deprecated temperature parameter, and added bounded HTTP quota reasons to
+  retry, stderr, and persistent-log diagnostics.
 - Changed Gemini retry delays to 1, 4, 9, and 16 seconds and report every
   retry to stderr and, when enabled, the persistent run log.
 - Added optional, case-insensitive, vault-contained `destination_roots` for
