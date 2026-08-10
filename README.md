@@ -126,7 +126,7 @@ A coherent configuration looks like this:
         "content": "weave.update_transcript"
       },
       "destination_roots": {
-        "journals": "10 DSS/2026-2027 DSS6"
+        "journals": "SubDir1/SubDir2"
       },
       "destinations": {
         "gratitude": {
@@ -195,7 +195,7 @@ vault + destination file/directory
 
 Destination roots, files, and directories must be relative. They cannot escape the
 resolved vault with `..` or by resolving through a link to a location outside it.
-In the example, the four journals are under `vault/10 DSS/2026-2027 DSS6`; the unrooted unknown
+In the example, the four journals are under `vault/SubDir1/SubDir2`; the unrooted unknown
 destination remains under the vault-level `00 Inbox`.
 
 ## Weaving
@@ -208,7 +208,9 @@ searching occurs.
 
 Gemini credentials are read from `pass`; secrets never belong in configuration.
 The implementation uses Gemini's REST API directly, requests JSON, and retries
-only bounded transient network errors and HTTP 429/5xx responses. Every input field
+transient network errors and HTTP 429/5xx responses up to four times, waiting 1,
+4, 9, and 16 seconds. Every retry is reported on standard error and is also
+written to the persistent run log when `--log` is enabled. Every input field
 is immutable. If the provider replaces `transcript`, Weaver preserves the original
 and uses that attempted replacement only when needed to populate
 `weave.update_transcript`; no duplicate top-level transformed-text field is emitted. Other deleted or modified input fields remain errors. Fenced, explanatory,

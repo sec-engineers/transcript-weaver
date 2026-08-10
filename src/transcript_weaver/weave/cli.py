@@ -79,7 +79,12 @@ def run(
             config=config,
         )
         enriched, selected, model = transform(
-            packet, args.prompt_or_profile, config, effective_paths, provider=provider
+            packet,
+            args.prompt_or_profile,
+            config,
+            effective_paths,
+            provider=provider,
+            retry_reporter=invocation.warning,
         )
         invocation.log.info(
             f"Transformation completed profile={selected!r} provider='gemini' model={model!r}"

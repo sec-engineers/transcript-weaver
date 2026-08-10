@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -177,13 +178,18 @@ def transform(
     paths: ApplicationPaths,
     *,
     provider: Provider | None = None,
+    retry_reporter: Callable[[str], None] | None = None,
 ) -> tuple[dict[str, Any], str, str]:
     prompt, provider_name, selected = resolve_prompt(argument, config, paths)
     try:
         configured_name, provider_config = find_profile(
             config.providers, provider_name, kind="provider"
         )
-        active = provider or build_provider(configured_name, provider_config)
+        active = provider or build_provider(
+            configured_name,
+            provider_config,
+            retry_reporter=retry_reporter,
+        )
         response = active.transform(
             SYSTEM_INSTRUCTION, prompt, json.dumps(packet, ensure_ascii=False)
         )

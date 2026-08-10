@@ -356,16 +356,67 @@ def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> 
             return json.dumps({"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}).encode()
 
     calls = 0
+    delays: list[float] = []
+    retries: list[str] = []
 
     def opener(*args, **kwargs):
         nonlocal calls
         calls += 1
-        if calls == 1:
-            raise urllib.error.URLError("temporary")
+        if calls < 5:
+            raise urllib.error.HTTPError("https://redacted", 429, "limited", {}, None)
         return Response()
 
-    live = GeminiProvider("m", "n", opener=opener, sleeper=lambda _: None, max_attempts=2)
-    assert live.transform("s", "p", "{}") == "{}" and calls == 2
+    live = GeminiProvider(
+        "m",
+        "n",
+        opener=opener,
+        sleeper=delays.append,
+        retry_reporter=retries.append,
+    )
+    assert live.transform("s", "p", "{}") == "{}" and calls == 5
+    assert delays == [1.0, 4.0, 9.0, 16.0]
+    assert len(retries) == 4
+    assert "retry 1 of 4 in 1 seconds" in retries[0]
+    assert "retry 4 of 4 in 16 seconds" in retries[-1]
+
+
+def test_retry_warning_reaches_stderr_and_enabled_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = paths_with_config(tmp_path)
+
+    class ReportingProvider(FakeProvider):
+        model = "reporting"
+
+        def __init__(self, reporter):
+            super().__init__()
+            self.reporter = reporter
+
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            self.reporter("Gemini HTTP 429; retry 1 of 4 in 1 seconds")
+            return super().transform(system, prompt, packet_json)
+
+    def fake_build(name, config, *, retry_reporter=None):
+        assert retry_reporter is not None
+        return ReportingProvider(retry_reporter)
+
+    monkeypatch.setattr("transcript_weaver.weave.core.build_provider", fake_build)
+    stderr = io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup", "--log"],
+            stdin=io.StringIO(json.dumps(packet())),
+            stdout=io.StringIO(),
+            stderr=stderr,
+            paths=paths,
+        )
+        == 0
+    )
+    message = "Gemini HTTP 429; retry 1 of 4 in 1 seconds"
+    assert message in stderr.getvalue()
+    logs = list(paths.log_directory.glob("*-trweave.log"))
+    assert len(logs) == 1
+    assert message in logs[0].read_text()
 
 
 def test_insert_order_and_duplicate_warning(tmp_path: Path) -> None:
@@ -740,12 +791,9 @@ def test_packaged_output_profile_creates_inspectable_cwd_journal(
         warn=lambda _: None,
     )
     assert operation == "insert"
+    journal_root = config.out["franks-example"]["destination_roots"]["journals"]
     assert target == (
-        run_directory
-        / "transcript-weaver-test-output"
-        / "10 DSS"
-        / "2026-2027 DSS6"
-        / "Dream Journal.md"
+        run_directory / "transcript-weaver-test-output" / journal_root / "Dream Journal.md"
     )
     assert target.read_text() == "## 2026-08-05\n\nA prototype dream.\n\n"
     assert (paths.config_file.parent / "prompts" / "example.md").exists()

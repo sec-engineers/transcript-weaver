@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed Gemini retry delays to 1, 4, 9, and 16 seconds and report every
+  retry to stderr and, when enabled, the persistent run log.
 - Added optional, case-insensitive, vault-contained `destination_roots` for
   reusable output paths while preserving unrooted destination behavior.
 - Renamed the packaged output profile to `franks-example`, reorganized and

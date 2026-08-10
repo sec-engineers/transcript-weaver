@@ -31,6 +31,11 @@ class GeminiProvider:
     opener: Callable[..., Any] = urllib.request.urlopen
     sleeper: Callable[[float], None] = time.sleep
     max_attempts: int = 5
+    retry_reporter: Callable[[str], None] | None = None
+
+    def _report_retry(self, message: str) -> None:
+        if self.retry_reporter is not None:
+            self.retry_reporter(message)
 
     def _secret(self) -> str:
         try:
@@ -72,14 +77,24 @@ class GeminiProvider:
             except urllib.error.HTTPError as exc:
                 transient = exc.code in {429, 500, 502, 503, 504}
                 if transient and attempt < self.max_attempts:
-                    self.sleeper(float(attempt))
+                    delay = float(attempt * attempt)
+                    self._report_retry(
+                        f"Gemini HTTP {exc.code}; retry {attempt} of "
+                        f"{self.max_attempts - 1} in {delay:g} seconds"
+                    )
+                    self.sleeper(delay)
                     continue
                 raise ProviderError(
                     f"Gemini request failed with HTTP status {exc.code}.", transient=transient
                 ) from exc
             except (urllib.error.URLError, TimeoutError) as exc:
                 if attempt < self.max_attempts:
-                    self.sleeper(float(attempt))
+                    delay = float(attempt * attempt)
+                    self._report_retry(
+                        f"Gemini network error; retry {attempt} of "
+                        f"{self.max_attempts - 1} in {delay:g} seconds"
+                    )
+                    self.sleeper(delay)
                     continue
                 raise ProviderError(
                     "Gemini request failed after transient network errors.", transient=True
@@ -94,7 +109,12 @@ class GeminiProvider:
         return text
 
 
-def build_provider(name: str, config: dict[str, Any]) -> Provider:
+def build_provider(
+    name: str,
+    config: dict[str, Any],
+    *,
+    retry_reporter: Callable[[str], None] | None = None,
+) -> Provider:
     if name.casefold() != "gemini":
         raise ProviderError(f"Unsupported provider {name!r}.")
     if set(config) != {"model", "credential"} or not isinstance(config.get("model"), str):
@@ -110,4 +130,4 @@ def build_provider(name: str, config: dict[str, Any]) -> Provider:
         raise ProviderError(
             f"Provider {name!r} credential must specify source 'pass' and a nonempty name."
         )
-    return GeminiProvider(config["model"], credential["name"])
+    return GeminiProvider(config["model"], credential["name"], retry_reporter=retry_reporter)

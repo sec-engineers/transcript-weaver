@@ -168,7 +168,7 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
         '"timezone"', output_start
     )
     output_profile = config.out["franks-example"]
-    assert output_profile["destination_roots"] == {"journals": "10 DSS/2026-2027 DSS6"}
+    assert output_profile["destination_roots"] == {"journals": "SubDir1/SubDir2"}
     destinations = output_profile["destinations"]
     assert {
         name: destination.get("file", destination.get("directory"))
