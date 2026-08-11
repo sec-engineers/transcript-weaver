@@ -200,6 +200,11 @@ destination remains under the vault-level `00 Inbox`.
 
 ## Weaving
 
+Need an LLM API but do not have one yet? See
+[Free and Low-Cost LLM APIs](docs/free-and-low-cost-llm-apis.md) for general
+information about free tiers, low-cost gateways, and important trade-offs.
+Transcript Weaver does not currently support every provider discussed there.
+
 `trweave PROMPT_OR_PROFILE` first treats its argument as a path, resolving a
 relative path from the current working directory. A readable UTF-8 regular file
 supplies the complete prompt and uses the configured Gemini provider. Otherwise,
