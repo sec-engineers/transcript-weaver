@@ -48,7 +48,7 @@ emit their packet. `trwout` writes a file and emits no normal output.
   "run": {"id": "20260805-120000-a1b2"},
   "datetime": "2026-08-05T08:30:00Z",
   "source": {"type": "otter", "name": "Morning note", "reference": "https://otter.ai/u/example"},
-  "transcript": "Original transcript text",
+  "transcript": "Speaker 1 10:00 : Um, I am grateful this moring Transcribe by https://otter.ai",
   "metadata": {"duration_seconds": 180.0}
 }
 ```
@@ -63,7 +63,7 @@ provider to add fields. A valid result includes:
   "run": {"id": "20260805-120000-a1b2"},
   "datetime": "2026-08-05T08:30:00Z",
   "source": {"type": "otter", "name": "Morning note", "reference": "https://otter.ai/u/example"},
-  "transcript": "Original transcript text",
+  "transcript": "Speaker 1 10:00 : Um, I am grateful this moring Transcribe by https://otter.ai",
   "metadata": {"duration_seconds": 180.0},
   "weave": {"type": "gratitude", "update_transcript": "- I am grateful for this morning."}
 }
