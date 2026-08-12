@@ -24,7 +24,9 @@ Otter currently reserves its supported public API for Enterprise workspaces. The
 Playwright Python dependency is installed with Transcript Weaver, but Weaver does not
 require Playwright to download or maintain a separate bundled browser. Windows Chrome,
 WSL-to-Windows connectivity, a dedicated Chrome profile, and one-time port-proxy setup
-are still required; see [`docs/otter.md`](docs/otter.md) for the rationale and setup
+are still required; see
+[`docs/otter.md`](https://github.com/sec-engineers/transcript-weaver/blob/main/docs/otter.md)
+for the rationale and setup
 instructions before attempting `trwinp otter`.
 
 ```text
@@ -203,7 +205,8 @@ destination remains under the vault-level `00 Inbox`.
 ## Weaving
 
 Need an LLM API but do not have one yet? See
-[Free and Low-Cost LLM APIs](docs/free-and-low-cost-llm-apis.md) for general
+[Free and Low-Cost LLM APIs](https://github.com/sec-engineers/transcript-weaver/blob/main/docs/free-and-low-cost-llm-apis.md)
+for general
 information about free tiers, low-cost gateways, and important trade-offs.
 Transcript Weaver does not currently support every provider discussed there.
 
@@ -302,3 +305,12 @@ TRANSCRIPT_WEAVER_LIVE_OTTER=1 pytest --no-cov -m live_otter tests/test_live_ott
 
 That command reads `pass api/gemini` and sends only the harmless test transcript
 to Gemini. It does not access an Obsidian vault or Otter.
+
+## License
+
+Copyright © 2026 Frank Merrow.
+
+Transcript Weaver is free software licensed under the GNU General Public License,
+version 3 or later. See the
+[LICENSE](https://github.com/sec-engineers/transcript-weaver/blob/main/LICENSE)
+file for the complete terms.

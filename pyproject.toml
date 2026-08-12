@@ -8,13 +8,13 @@ dynamic = ["version"]
 description = "A safe, Unix-style transcript processing pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Transcript Weaver contributors" }]
 keywords = ["transcripts", "cli", "pipeline", "otter"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
-  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -22,6 +22,13 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = ["platformdirs>=4.0,<5", "playwright>=1.45,<2"]
+
+[project.urls]
+Homepage = "https://github.com/sec-engineers/transcript-weaver"
+Repository = "https://github.com/sec-engineers/transcript-weaver"
+Issues = "https://github.com/sec-engineers/transcript-weaver/issues"
+Documentation = "https://github.com/sec-engineers/transcript-weaver/tree/main/docs"
+Changelog = "https://github.com/sec-engineers/transcript-weaver/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
