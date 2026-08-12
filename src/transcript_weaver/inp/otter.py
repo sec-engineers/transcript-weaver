@@ -182,6 +182,7 @@ def _exception_summary(exc: Exception) -> str:
     return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
 
 
+# See docs/otter.md for why non-Enterprise accounts require browser automation.
 class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live test
     """Live Otter browser client with shared, run-correlated diagnostics."""
 

@@ -19,11 +19,13 @@ python3 -m pip install --editable .
 ```
 
 Otter acquisition currently supports WSL on Windows and controls the user's existing
-Windows Chrome through Chrome DevTools integration. The Playwright Python dependency is
-installed with Transcript Weaver, but Weaver does not require Playwright to download or
-maintain a separate bundled browser. Windows Chrome, WSL-to-Windows connectivity, a
-dedicated Chrome profile, and one-time port-proxy setup are still required; see
-[`docs/otter.md`](docs/otter.md) before attempting `trwinp otter`.
+Windows Chrome through Chrome DevTools integration. Browser automation is intentional:
+Otter currently reserves its supported public API for Enterprise workspaces. The
+Playwright Python dependency is installed with Transcript Weaver, but Weaver does not
+require Playwright to download or maintain a separate bundled browser. Windows Chrome,
+WSL-to-Windows connectivity, a dedicated Chrome profile, and one-time port-proxy setup
+are still required; see [`docs/otter.md`](docs/otter.md) for the rationale and setup
+instructions before attempting `trwinp otter`.
 
 ```text
 trwinp -> normalized JSON -> trweave -> enriched JSON -> trwout

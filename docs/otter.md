@@ -1,5 +1,31 @@
 # Live Otter setup
 
+## Why Transcript Weaver uses browser automation
+
+Transcript Weaver intentionally controls the authenticated Otter web interface
+instead of using Otter's official public API. As of August 11, 2026, Otter
+states that its public API is available only to Enterprise workspaces. Otter's
+Business, Pro, and Basic plans do not include public API access; Enterprise
+pricing requires contacting Otter sales. Enterprise customers who do not see
+API access must contact their Otter account manager to have it enabled.
+
+That restriction makes the official API unsuitable for a tool intended to work
+with an ordinary individual Otter account. The `trwinp otter` adapter therefore
+uses a dedicated, locally authenticated Chrome profile and Otter's visible web
+controls to copy a transcript. It does not ask for, store, or transmit the
+user's Otter password.
+
+This choice has a trade-off: browser interfaces can change without notice, so
+selectors may occasionally need maintenance. If Otter makes its supported API
+available to non-Enterprise customers in the future, a documented API adapter
+would be preferable to browser automation.
+
+Official references, reviewed August 11, 2026:
+
+- [Does Otter offer an open API?](https://help.otter.ai/hc/en-us/articles/4412365535895-Does-Otter-offer-an-open-API)
+- [Otter.ai Public API](https://help.otter.ai/hc/en-us/articles/36130822688279-Otter-ai-Public-API)
+- [Otter pricing](https://otter.ai/pricing)
+
 ## Platform support and prerequisites
 
 The live Otter adapter currently supports **WSL on Windows with Windows Chrome**. This
