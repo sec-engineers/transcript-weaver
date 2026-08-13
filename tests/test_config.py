@@ -113,6 +113,7 @@ def test_linux_xdg_and_fallback_paths(monkeypatch) -> None:
 def test_macos_paths(monkeypatch) -> None:
     from platformdirs.macos import MacOS
 
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setenv("HOME", "/Users/example")
     paths = get_application_paths(
         MacOS("Transcript Weaver", appauthor=False),
