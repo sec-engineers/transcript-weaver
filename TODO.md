@@ -5,3 +5,5 @@
 - Have trwout delete otter if file write goes okay.  Make option because of risk
 - --help should show version and/or --version added to commands
 - Add SECURITY.md as per both Gemini and GitHub best practices
+- Add documenation on how to setup Chrome Configurations
+- Test W11 in non-WSL Mode
