@@ -6,9 +6,13 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TextIO
+from typing import NoReturn, TextIO
 
-from transcript_weaver.cli_common import add_logging_arguments, start_invocation
+from transcript_weaver.cli_common import (
+    add_logging_arguments,
+    add_version_argument,
+    start_invocation,
+)
 from transcript_weaver.config import ApplicationPaths, ConfigurationError
 from transcript_weaver.inp.errors import ExitStatus, InputError
 from transcript_weaver.inp.otter import OtterSource
@@ -18,14 +22,35 @@ from transcript_weaver.runtime import RunIdError, generate_run_id
 
 
 def _add_stage_logging(parser: argparse.ArgumentParser) -> None:
-    add_logging_arguments(parser)
+    add_logging_arguments(parser, suppress_defaults=True)
+
+
+class _ModeArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        if message == "the following arguments are required: mode":
+            modes = next(
+                (
+                    action.choices
+                    for action in self._actions
+                    if isinstance(action, argparse._SubParsersAction)
+                ),
+                {},
+            )
+            self.print_usage(sys.stderr)
+            self.exit(
+                2,
+                f"{self.prog}: error: {message}\nValid modes: {', '.join(modes)}\n",
+            )
+        super().error(message)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _ModeArgumentParser(
         prog="trwinp",
         description="Acquire a transcript and emit a normalized JSON packet.",
     )
+    add_logging_arguments(parser)
+    add_version_argument(parser)
     subparsers = parser.add_subparsers(dest="mode", required=True)
     stdin_parser = subparsers.add_parser(
         "stdin", help="read UTF-8 transcript text from standard input"

@@ -13,7 +13,13 @@ from transcript_weaver.inp import cli
 from transcript_weaver.inp.errors import ExitStatus, SourceUnavailableError, TranscriptNotFoundError
 from transcript_weaver.inp.otter import OtterCapture, OtterSource, parse_otter_datetime
 from transcript_weaver.inp.sources import FileSource, StdinSource
-from transcript_weaver.models import AcquiredTranscript, ModelError, Source, TranscriptPacket
+from transcript_weaver.models import (
+    SCHEMA_VERSION,
+    AcquiredTranscript,
+    ModelError,
+    Source,
+    TranscriptPacket,
+)
 from transcript_weaver.out import cli as out_cli
 from transcript_weaver.weave import cli as weave_cli
 
@@ -257,6 +263,37 @@ def test_conventional_usage_and_help(args: list[str]) -> None:
     with pytest.raises(SystemExit) as caught:
         cli.run(args)
     assert caught.value.code in {0, 2}
+
+
+@pytest.mark.parametrize("args", [[], ["--dkdkdk"]])
+def test_missing_input_mode_lists_valid_modes(args: list[str], capsys) -> None:
+    with pytest.raises(SystemExit) as caught:
+        cli.run(args)
+    assert caught.value.code == 2
+    error = capsys.readouterr().err
+    assert "trwinp: error: the following arguments are required: mode\n" in error
+    assert "Valid modes: stdin, file, otter\n" in error
+
+
+@pytest.mark.parametrize(
+    ("module", "command"),
+    [(cli, "trwinp"), (weave_cli, "trweave"), (out_cli, "trwout")],
+)
+def test_command_version_exits_without_normal_arguments(module, command: str, capsys) -> None:
+    with pytest.raises(SystemExit) as caught:
+        module.run(["--version"])
+    assert caught.value.code == 0
+    assert capsys.readouterr().out == (
+        f"{command} 1.1.0000\nSchema currently used: {SCHEMA_VERSION}\n"
+    )
+
+
+@pytest.mark.parametrize("module", [cli, weave_cli, out_cli])
+def test_command_help_documents_supported_logging_switches(module) -> None:
+    help_text = module.build_parser().format_help()
+    assert "--log" in help_text
+    assert "--verbose" in help_text
+    assert "--debug-artifacts" in help_text
 
 
 class FakeClient:

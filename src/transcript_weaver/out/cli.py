@@ -8,7 +8,11 @@ import sys
 from collections.abc import Sequence
 from typing import Any, TextIO
 
-from transcript_weaver.cli_common import add_logging_arguments, start_invocation
+from transcript_weaver.cli_common import (
+    add_logging_arguments,
+    add_version_argument,
+    start_invocation,
+)
 from transcript_weaver.config import (
     ApplicationPaths,
     ConfigurationError,
@@ -26,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("output_profile", nargs="?", help="configured output profile")
     add_logging_arguments(parser)
+    add_version_argument(parser)
     return parser
 
 

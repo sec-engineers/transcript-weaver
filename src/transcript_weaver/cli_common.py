@@ -6,12 +6,14 @@ import argparse
 from dataclasses import dataclass
 from typing import TextIO
 
+from transcript_weaver import __version__
 from transcript_weaver.config import (
     AppConfig,
     ApplicationPaths,
     get_application_paths,
     load_or_create_config,
 )
+from transcript_weaver.models import SCHEMA_VERSION
 from transcript_weaver.runtime import (
     DiagnosticError,
     LoggingOptions,
@@ -38,24 +40,54 @@ class Invocation:
         self.log.close()
 
 
-def add_logging_arguments(parser: argparse.ArgumentParser) -> None:
+def add_logging_arguments(
+    parser: argparse.ArgumentParser, *, suppress_defaults: bool = False
+) -> None:
+    default = argparse.SUPPRESS if suppress_defaults else False
     parser.add_argument(
         "--log",
         action="store_true",
+        default=default,
         help="write a persistent diagnostic log in the per-user log directory",
     )
     parser.add_argument(
         "--verbose",
         action="store_true",
+        default=default,
         help="write a more detailed persistent log (implies --log)",
     )
     parser.add_argument(
         "--debug-artifacts",
         action="store_true",
+        default=default,
         help=(
             "capture potentially sensitive HTML and screenshots; inspect before sharing "
             "(implies --verbose and --log)"
         ),
+    )
+
+
+class _VersionAction(argparse.Action):
+    def __init__(self, option_strings: list[str], dest: str, **kwargs: object) -> None:
+        super().__init__(option_strings, dest, nargs=0, **kwargs)  # type: ignore[arg-type]
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        del namespace, values, option_string
+        print(f"{parser.prog} {__version__}\nSchema currently used: {SCHEMA_VERSION}")
+        parser.exit(0)
+
+
+def add_version_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--version",
+        action=_VersionAction,
+        help="show the command version and currently used schema version, then exit",
     )
 
 
