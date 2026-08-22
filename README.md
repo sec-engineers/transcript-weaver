@@ -279,11 +279,12 @@ Create distributions with:
 python -m transcript_weaver.build
 ```
 
-That intentional command takes an exclusive build lock, increments the build component
-once, atomically updates the source version, and builds both distributions. It restores
-the previous source version if the build fails. Imports, tests, installs, and ordinary
-packaging metadata inspection do not increment the version. A stale lock must be
-investigated and removed manually after confirming no build is active.
+That command takes an exclusive build lock and builds both distributions for the
+version already recorded in source. It never modifies the version, whether the build
+succeeds or fails, so identical source can be rebuilt reproducibly. Release-relevant
+source changes increment the build component deliberately once per pending change set;
+repeated builds, installs, and CI runs do not. A stale lock must be investigated and
+removed manually after confirming no build is active.
 
 ## Development and tests
 

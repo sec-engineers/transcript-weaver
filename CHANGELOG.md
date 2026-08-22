@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0002 - 2026-08-22
+
+- Made distribution builds reproducible by using the version recorded in source
+  without incrementing or otherwise modifying it.
+
 ## 1.1.0001 - 2026-08-22
 
 - Added dotted packet placeholders to output body formats while retaining the

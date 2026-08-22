@@ -1,4 +1,4 @@
-"""Intentional distribution build with one atomic build-number increment."""
+"""Non-mutating distribution build for the version recorded in source."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ LOCK_NAME = ".transcript-weaver-build.lock"
 
 
 class BuildVersionError(RuntimeError):
-    """Raised when a release build cannot update its version safely."""
+    """Raised when a distribution build cannot use the recorded version safely."""
 
 
-def _read_version(path: Path) -> tuple[str, re.Match[str]]:
+def _read_version(path: Path) -> str:
     try:
         content = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -29,34 +29,11 @@ def _read_version(path: Path) -> tuple[str, re.Match[str]]:
             "Authoritative version must have the form major.minor.build with a "
             "four-digit build number."
         )
-    return content, match
-
-
-def _next_content(content: str, match: re.Match[str]) -> tuple[str, str]:
-    major, minor, build_text = match.groups()
-    build = int(build_text)
-    if build >= 9999:
-        raise BuildVersionError("Build number overflow: increment major or minor first.")
-    version = f"{major}.{minor}.{build + 1:04d}"
-    updated = content[: match.start(1)] + version + content[match.end(3) :]
-    return updated, version
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        with temporary.open("x", encoding="utf-8", newline="") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    return ".".join(match.groups())
 
 
 def run_release_build(project_root: Path, *, command: Sequence[str] | None = None) -> str:
-    """Increment once, build distributions, and roll back the source version on failure."""
+    """Build distributions without changing the version recorded in source."""
     root = project_root.resolve()
     version_path = root / "src" / "transcript_weaver" / "_version.py"
     lock_path = root / LOCK_NAME
@@ -71,13 +48,8 @@ def run_release_build(project_root: Path, *, command: Sequence[str] | None = Non
     finally:
         os.close(descriptor)
 
-    original = ""
-    changed = False
     try:
-        original, match = _read_version(version_path)
-        updated, version = _next_content(original, match)
-        _atomic_write(version_path, updated)
-        changed = True
+        version = _read_version(version_path)
         build_command = list(command or (sys.executable, "-m", "build"))
         result = subprocess.run(build_command, cwd=root, check=False)
         if result.returncode != 0:
@@ -85,10 +57,6 @@ def run_release_build(project_root: Path, *, command: Sequence[str] | None = Non
                 f"Distribution build failed with exit status {result.returncode}."
             )
         return version
-    except BaseException:
-        if changed:
-            _atomic_write(version_path, original)
-        raise
     finally:
         with suppress(FileNotFoundError):
             lock_path.unlink()

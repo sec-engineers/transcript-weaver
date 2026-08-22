@@ -10,5 +10,6 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+.transcript-weaver-build.lock
 debug_otter/
 mastermind-gold-plan-site/
