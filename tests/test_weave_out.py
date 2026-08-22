@@ -857,6 +857,60 @@ def test_unknown_category_and_invalid_format_are_rejected(tmp_path: Path) -> Non
     assert out_cli.run(["journals"], stdin=io.StringIO(json.dumps(enriched)), paths=paths) == 1
 
 
+def test_output_format_supports_dotted_packet_fields_and_literal_braces(tmp_path: Path) -> None:
+    value = base_config()
+    value["out"]["Journals"]["destinations"]["gratitude"]["format"] = (
+        "{source.name} ({metadata.duration_seconds}) {{kept}}\n{content}\n"
+    )
+    paths = paths_with_config(tmp_path, value)
+    enriched = packet()
+    enriched["metadata"]["duration_seconds"] = 12.5
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "body"}
+
+    config = load_or_create_config(paths)
+    _, target = persist(enriched, "journals", config, paths, warn=lambda _: None)
+
+    assert target.read_text() == "Note (12.5) {kept}\nbody\n"
+
+
+@pytest.mark.parametrize(
+    ("placeholder", "message"),
+    [
+        ("missing.field", "missing"),
+        ("metadata.nested", "string or finite number"),
+        ("metadata.nested[0]", "without indexing"),
+        ("metadata.enabled", "string or finite number"),
+        ("metadata.empty", "string or finite number"),
+    ],
+)
+def test_output_format_rejects_invalid_packet_placeholder_values(
+    tmp_path: Path, placeholder: str, message: str
+) -> None:
+    value = base_config()
+    value["out"]["Journals"]["destinations"]["gratitude"]["format"] = "{" + placeholder + "}"
+    paths = paths_with_config(tmp_path, value)
+    enriched = packet()
+    enriched["metadata"].update({"enabled": True, "empty": None})
+    enriched["weave"] = {"type": "gratitude", "update_transcript": "body"}
+
+    with pytest.raises(OutputError, match=message):
+        persist(enriched, "journals", load_or_create_config(paths), paths, warn=lambda _: None)
+
+
+@pytest.mark.parametrize("filename", ["{source.name}.md", "{content}.md"])
+def test_create_filename_rejects_packet_and_content_placeholders(
+    tmp_path: Path, filename: str
+) -> None:
+    value = base_config()
+    value["out"]["Journals"]["destinations"]["unknown"]["filename"] = filename
+    paths = paths_with_config(tmp_path, value)
+    enriched = packet()
+    enriched["weave"] = {"type": "unknown", "update_transcript": "body"}
+
+    with pytest.raises(OutputError, match="limited to"):
+        persist(enriched, "journals", load_or_create_config(paths), paths, warn=lambda _: None)
+
+
 def test_packaged_output_profile_creates_inspectable_cwd_journal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

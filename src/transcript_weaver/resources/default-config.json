@@ -76,7 +76,8 @@
           "Insert places a date heading and content in chronological",
           "order. Duplicate dates get a separator and stderr warning.",
           "Create writes one new file without overwriting another.",
-          "Supported placeholders are date, time, and content."
+          "Formats support date, time, content, and dotted packet paths.",
+          "Filename placeholders are limited to date and time."
         ],
         "gratitude": {
           "operation": "insert",

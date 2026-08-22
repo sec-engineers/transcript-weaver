@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import string
@@ -121,18 +122,58 @@ def soft_wrap_markdown(content: str, *, width: int = 72) -> str:
     return "\n".join(lines)
 
 
-def _format(template: Any, *, date: str, time: str, content: str) -> str:
+def _format_value(packet: Mapping[str, Any], dotted: str) -> str:
+    if "[" in dotted or "]" in dotted:
+        raise OutputError(
+            f"Packet placeholder {{{dotted}}} must use a dotted path without indexing."
+        )
+    try:
+        value = extract_dotted(packet, dotted, field="format placeholder")
+    except ValueError as exc:
+        raise OutputError(str(exc)) from exc
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float) and math.isfinite(value):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    raise OutputError(f"Packet placeholder {{{dotted}}} must resolve to a string or finite number.")
+
+
+def _format(
+    template: Any,
+    *,
+    date: str,
+    time: str,
+    content: str,
+    packet: Mapping[str, Any],
+    allow_packet_fields: bool,
+) -> str:
     if not isinstance(template, str):
         raise OutputError("Destination format must be a string.")
-    for _, field, spec, conversion in string.Formatter().parse(template):
-        if field is not None and field not in {"date", "time", "content"}:
-            raise OutputError(f"Unsupported format placeholder {{{field}}}.")
-        if spec or conversion:
-            raise OutputError("Format specifications and conversions are not supported.")
     try:
-        return template.format(date=date, time=time, content=content)
+        parsed = list(string.Formatter().parse(template))
     except ValueError as exc:
         raise OutputError("Destination format is malformed.") from exc
+    rendered: list[str] = []
+    reserved = {"date": date, "time": time, "content": content}
+    for literal, field, spec, conversion in parsed:
+        rendered.append(literal)
+        if field is None:
+            continue
+        if spec or conversion:
+            raise OutputError("Format specifications and conversions are not supported.")
+        if not field:
+            raise OutputError("Destination format contains an empty placeholder.")
+        if field in reserved:
+            if field == "content" and not allow_packet_fields:
+                raise OutputError("Filename placeholders are limited to {date} and {time}.")
+            rendered.append(reserved[field])
+        elif allow_packet_fields:
+            rendered.append(_format_value(packet, field))
+        else:
+            raise OutputError("Filename placeholders are limited to {date} and {time}.")
+    return "".join(rendered)
 
 
 def insert_chronologically(existing: str, entry_date: str, block: str) -> tuple[str, bool]:
@@ -221,7 +262,14 @@ def persist(
     if not isinstance(destination, dict):
         raise OutputError(f"Destination {destination_name!r} must be an object.")
     operation = destination.get("operation")
-    rendered = _format(destination.get("format"), date=date, time=time_value, content=content)
+    rendered = _format(
+        destination.get("format"),
+        date=date,
+        time=time_value,
+        content=content,
+        packet=packet,
+        allow_packet_fields=True,
+    )
     vault = resolve_configured_path(
         profile["vault"], config_file=paths.config_file, field=f"out.{profile_name}.vault"
     )
@@ -277,7 +325,14 @@ def persist(
             or not isinstance(destination.get("filename"), str)
         ):
             raise OutputError(f"Destination {destination_name!r} is invalid for create.")
-        filename = _format(destination["filename"], date=date, time=time_value, content=content)
+        filename = _format(
+            destination["filename"],
+            date=date,
+            time=time_value,
+            content=content,
+            packet=packet,
+            allow_packet_fields=False,
+        )
         target = _safe_target(target_root, str(Path(destination["directory"]) / filename))
         _atomic_create(target, rendered)
     else:

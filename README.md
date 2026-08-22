@@ -230,8 +230,13 @@ partial, non-object, or invalid `weave` responses are rejected.
 
 `trwout OUTPUT_PROFILE` extracts category and content through the configured
 dotted packet fields. It converts the packet's UTC datetime to the profile's IANA
-timezone without modifying the packet. `{date}`, `{time}`, and `{content}` are the
-only formatting placeholders.
+timezone without modifying the packet. Destination formats support the computed
+`{date}` and `{time}` placeholders, the configured and soft-wrapped `{content}`
+placeholder, and dotted packet paths such as `{source.name}` or `{weave.type}`.
+Dotted placeholders must resolve to strings or finite numbers; missing fields,
+objects, arrays, booleans, and null values are rejected. Use `{{` and `}}` for
+literal braces. Format specifications, conversions, and bracket indexing are not
+supported. Create-operation filenames allow only `{date}` and `{time}`.
 
 - `insert` atomically places date-only headings in ascending local-date order.
 - Multiple entries on the same local date are retained in arrival order, separated by

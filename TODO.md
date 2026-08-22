@@ -5,3 +5,4 @@
 - Have trwout delete otter if file write goes okay.  Make option because of risk
 - Add documenation on how to setup Chrome Configurations
 - Test W11 in non-WSL Mode
+- Debug what trwinp does if there are not recording in Otter
