@@ -141,7 +141,12 @@ def test_log_options_never_contaminate_stdout_or_log_transcript(
     assert stderr.getvalue() == ""
 
 
-def test_debug_artifacts_imply_log_and_warn(app_paths: ApplicationPaths) -> None:
+def test_debug_artifacts_imply_log_without_repeating_warning(
+    app_paths: ApplicationPaths,
+) -> None:
+    from transcript_weaver.artifacts import enable_permission, permission_directory
+
+    enable_permission(permission_directory(app_paths.runtime_directory, app_paths.log_directory))
     stdout, stderr = io.StringIO(), io.StringIO()
     assert (
         cli.run(
@@ -155,9 +160,25 @@ def test_debug_artifacts_imply_log_and_warn(app_paths: ApplicationPaths) -> None
     )
     assert json.loads(stdout.getvalue())["run"]["id"]
     assert list(app_paths.log_directory.glob("*.log"))
-    assert "may contain transcripts" in stderr.getvalue()
+    assert stderr.getvalue() == ""
     assert not list(app_paths.log_directory.glob("*.html"))
     assert not list(app_paths.log_directory.glob("*.png"))
+
+
+def test_debug_artifacts_require_temporary_permission(app_paths: ApplicationPaths) -> None:
+    stdout, stderr = io.StringIO(), io.StringIO()
+    assert (
+        cli.run(
+            ["stdin", "--debug-artifacts"],
+            stdin=io.StringIO("private input"),
+            stdout=stdout,
+            stderr=stderr,
+            paths=app_paths,
+        )
+        == 1
+    )
+    assert stdout.getvalue() == ""
+    assert "trwprep artifacts enable" in stderr.getvalue()
 
 
 def test_failure_has_no_partial_json(app_paths: ApplicationPaths) -> None:
@@ -284,7 +305,7 @@ def test_command_version_exits_without_normal_arguments(module, command: str, ca
         module.run(["--version"])
     assert caught.value.code == 0
     assert capsys.readouterr().out == (
-        f"{command} 1.1.0003\nSchema currently used: {SCHEMA_VERSION}\n"
+        f"{command} 1.1.0004\nSchema currently used: {SCHEMA_VERSION}\n"
     )
 
 
@@ -477,7 +498,7 @@ def test_missing_playwright_is_actionable_and_traceback_free(
     stdout, stderr = io.StringIO(), io.StringIO()
     assert cli.run(["otter"], stdout=stdout, stderr=stderr, paths=app_paths) != 0
     assert stdout.getvalue() == ""
-    assert "Reinstall or upgrade transcript-weaver" in stderr.getvalue()
+    assert "Reinstall or upgrade transcript-weaver" in " ".join(stderr.getvalue().split())
     assert "Traceback" not in stderr.getvalue()
 
 

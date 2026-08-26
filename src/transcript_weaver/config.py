@@ -40,6 +40,7 @@ class AppConfig:
 class ApplicationPaths:
     config_file: Path
     log_directory: Path
+    runtime_directory: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +56,13 @@ def get_application_paths(
         app_name = "transcript-weaver" if platform.system() == "Linux" else "Transcript Weaver"
         config_dirs = config_dirs or PlatformDirs(appname=app_name, appauthor=False, roaming=True)
         log_dirs = log_dirs or PlatformDirs(appname=app_name, appauthor=False, roaming=False)
+    runtime_path = getattr(log_dirs, "user_runtime_path", None)
+    if runtime_path is None:
+        runtime_path = Path(log_dirs.user_log_path).parent / "runtime"
     return ApplicationPaths(
-        Path(config_dirs.user_config_path) / "config.json", Path(log_dirs.user_log_path)
+        Path(config_dirs.user_config_path) / "config.json",
+        Path(log_dirs.user_log_path),
+        Path(runtime_path),
     )
 
 
@@ -73,6 +79,10 @@ def packaged_default_config_bytes() -> bytes:
 
 def packaged_example_prompt_bytes() -> bytes:
     return _resource_bytes("prompts", "example.md")
+
+
+def packaged_linkedin_prompt_bytes() -> bytes:
+    return _resource_bytes("prompts", "linkedin-profile.md")
 
 
 def _without_comments(value: Any, *, context: str) -> Any:
@@ -377,6 +387,13 @@ def load_or_create_config(paths: ApplicationPaths) -> AppConfig:
             prompt_path = config_path.parent / "prompts/example.md"
             prompt_path.parent.mkdir(parents=True, exist_ok=True)
             _create_file_if_absent(prompt_path, packaged_example_prompt_bytes())
+        if any(
+            profile.get("prompt_file") == "prompts/linkedin-profile.md"
+            for profile in config.weave.values()
+        ):
+            prompt_path = config_path.parent / "prompts/linkedin-profile.md"
+            prompt_path.parent.mkdir(parents=True, exist_ok=True)
+            _create_file_if_absent(prompt_path, packaged_linkedin_prompt_bytes())
         return config
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Could not read valid JSON configuration: {config_path}") from exc
@@ -385,13 +402,19 @@ def load_or_create_config(paths: ApplicationPaths) -> AppConfig:
 def _create_packaged_defaults(config_path: Path) -> None:
     config_data = packaged_default_config_bytes()
     prompt_data = packaged_example_prompt_bytes()
+    linkedin_prompt_data = packaged_linkedin_prompt_bytes()
     try:
         validate_config(json.loads(config_data.decode("utf-8")), path=config_path)
         prompt_data.decode("utf-8")
+        linkedin_prompt_data.decode("utf-8")
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError("Packaged default resources are invalid.") from exc
     files = (
         _ResourceFile(("prompts", "example.md"), config_path.parent / "prompts/example.md"),
+        _ResourceFile(
+            ("prompts", "linkedin-profile.md"),
+            config_path.parent / "prompts/linkedin-profile.md",
+        ),
         _ResourceFile(("default-config.json",), config_path),
     )
     for resource_file in files:

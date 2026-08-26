@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import textwrap
 from dataclasses import dataclass
 from typing import TextIO
 
 from transcript_weaver import __version__
+from transcript_weaver.artifacts import (
+    ArtifactPermissionError,
+    permission_directory,
+    read_permission,
+)
 from transcript_weaver.config import (
     AppConfig,
     ApplicationPaths,
+    ConfigurationError,
     get_application_paths,
     load_or_create_config,
 )
@@ -32,12 +39,31 @@ class Invocation:
     stderr: TextIO
 
     def warning(self, message: str) -> None:
-        print(f"{self.stage}: warning: {message}", file=self.stderr)
+        write_cli_message(self.stderr, message, prefix=f"{self.stage}: warning: ")
         self.log.warning(message)
 
     def close(self, *, success: bool) -> None:
         self.log.info("Stage completed successfully" if success else "Stage failed")
         self.log.close()
+
+
+def write_cli_message(stream: TextIO, message: str, *, prefix: str = "") -> None:
+    """Write ordinary CLI prose within 72 columns without splitting paths."""
+    lines = message.splitlines() or [""]
+    for index, line in enumerate(lines):
+        initial = prefix if index == 0 else ""
+        rendered = textwrap.fill(
+            line,
+            width=72,
+            initial_indent=initial,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        stream.write(rendered + "\n")
+
+
+def write_cli_error(stream: TextIO, stage: str, error: object) -> None:
+    write_cli_message(stream, str(error), prefix=f"{stage}: ")
 
 
 def add_logging_arguments(
@@ -61,8 +87,8 @@ def add_logging_arguments(
         action="store_true",
         default=default,
         help=(
-            "capture potentially sensitive HTML and screenshots; inspect before sharing "
-            "(implies --verbose and --log)"
+            "capture potentially sensitive diagnostics after 'trwprep artifacts enable'; "
+            "inspect before sharing (implies --verbose and --log)"
         ),
     )
 
@@ -111,6 +137,19 @@ def start_invocation(
     effective_paths = paths or get_application_paths()
     effective_config = config or load_or_create_config(effective_paths)
     options = logging_options(args)
+    if options.debug_artifacts:
+        runtime_directory = permission_directory(
+            effective_paths.runtime_directory, effective_paths.log_directory
+        )
+        try:
+            permission = read_permission(runtime_directory)
+        except ArtifactPermissionError as exc:
+            raise ConfigurationError(str(exc)) from exc
+        if permission is None:
+            raise ConfigurationError(
+                "--debug-artifacts requires temporary permission.\nRun "
+                "'trwprep artifacts enable' and review the security warning first."
+            )
     try:
         stage_log = StageLog(
             run_id=run_id,
@@ -141,9 +180,4 @@ def start_invocation(
         current_run_id=run_id,
         warn=invocation.warning,
     )
-    if options.debug_artifacts:
-        invocation.warning(
-            "debug artifacts may contain transcripts, account details, email addresses, "
-            "and private page contents; inspect them before sharing"
-        )
     return invocation

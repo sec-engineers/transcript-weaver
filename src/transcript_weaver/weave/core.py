@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -14,17 +15,24 @@ from transcript_weaver.weave.provider import Provider, ProviderError, build_prov
 
 SYSTEM_INSTRUCTION = (
     "You are one stage in a JSON-to-JSON pipeline. Return exactly one complete JSON "
-    "object with no Markdown fences or explanatory prose. Preserve every input field "
-    "and value exactly: do not modify or delete anything. Put the cleaned transcript "
-    "only in weave.update_transcript and leave transcript unchanged. Add transformation "
-    "results without changing existing data. Add weave as a TOP-LEVEL sibling of metadata, "
-    "never inside metadata or another field. Follow the user transformation prompt for "
-    "classification and content."
+    "object with no Markdown fences or explanatory prose. Its only top-level field must "
+    "be weave, containing a nonempty transformation result. Do not reproduce transcript "
+    "or any other supplied packet field; Transcript Weaver merges weave into the original "
+    "packet locally. Follow the user transformation prompt for the structure and content "
+    "beneath weave."
 )
 
 
 class WeaveError(RuntimeError):
     pass
+
+
+class ResponseValidationError(WeaveError):
+    """Provider response could not satisfy the transformation result contract."""
+
+    def __init__(self, message: str, *, response: str) -> None:
+        super().__init__(message)
+        self.response = response
 
 
 class PreservationError(WeaveError):
@@ -104,13 +112,63 @@ def _preserves(original: Any, enriched: Any, path: str = "packet") -> None:
         raise WeaveError(f"Provider modified original field {path}.")
 
 
+def _validate_weave(weave: Any, *, response: str) -> dict[str, Any]:
+    if not isinstance(weave, dict) or not weave:
+        raise ResponseValidationError(
+            "Provider response must contain a nonempty top-level weave object.",
+            response=response,
+        )
+    for field in ("type", "update_transcript"):
+        if field in weave and (not isinstance(weave[field], str) or not weave[field].strip()):
+            raise ResponseValidationError(
+                f"Provider response weave.{field} must be a nonempty string.",
+                response=response,
+            )
+    return weave
+
+
+def _merge_additions(
+    existing: dict[str, Any], additions: dict[str, Any], *, path: str, response: str
+) -> None:
+    for key, value in additions.items():
+        field_path = f"{path}.{key}"
+        if key not in existing:
+            existing[key] = deepcopy(value)
+        elif isinstance(existing[key], dict) and isinstance(value, dict):
+            _merge_additions(existing[key], value, path=field_path, response=response)
+        elif existing[key] != value:
+            raise ResponseValidationError(
+                f"Provider weave-only response attempted to replace existing field {field_path}.",
+                response=response,
+            )
+
+
 def validate_response(text: str, original: dict[str, Any]) -> dict[str, Any]:
     try:
         enriched = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise WeaveError("Provider response was not exactly one valid JSON object.") from exc
+        raise ResponseValidationError(
+            "Provider response was not exactly one valid JSON object.", response=text
+        ) from exc
     if not isinstance(enriched, dict):
-        raise WeaveError("Provider response must be a top-level JSON object.")
+        raise ResponseValidationError(
+            "Provider response must be a top-level JSON object.", response=text
+        )
+
+    if set(enriched) == {"weave"}:
+        fragment_weave = _validate_weave(enriched["weave"], response=text)
+        merged = deepcopy(original)
+        existing_weave = merged.get("weave")
+        if existing_weave is None:
+            merged["weave"] = deepcopy(fragment_weave)
+        elif isinstance(existing_weave, dict):
+            _merge_additions(existing_weave, fragment_weave, path="packet.weave", response=text)
+        else:
+            raise ResponseValidationError(
+                "Original packet weave field must be an object before adding results.",
+                response=text,
+            )
+        return merged
 
     attempted_transcript: Any = None
     transcript_was_changed = (
@@ -141,16 +199,7 @@ def validate_response(text: str, original: dict[str, Any]) -> dict[str, Any]:
         _preserves(original, enriched)
     except WeaveError as exc:
         raise PreservationError(str(exc), original=original, provider_output=enriched) from exc
-    if (
-        not isinstance(weave, dict)
-        or not isinstance(weave.get("type"), str)
-        or not weave["type"].strip()
-        or not isinstance(weave.get("update_transcript"), str)
-        or not weave["update_transcript"].strip()
-    ):
-        raise WeaveError(
-            "Provider response must contain weave with nonempty string type and update_transcript."
-        )
+    _validate_weave(weave, response=text)
     return enriched
 
 
@@ -196,6 +245,6 @@ def transform(
     except (ConfigurationError, ProviderError) as exc:
         raise WeaveError(str(exc)) from exc
     enriched = validate_response(response, packet)
-    if _duration_forces_unknown(packet):
+    if _duration_forces_unknown(packet) and isinstance(enriched["weave"].get("type"), str):
         enriched["weave"]["type"] = "unknown"
     return enriched, selected, active.model

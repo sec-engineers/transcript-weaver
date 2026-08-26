@@ -12,6 +12,7 @@ from transcript_weaver.cli_common import (
     add_logging_arguments,
     add_version_argument,
     start_invocation,
+    write_cli_error,
 )
 from transcript_weaver.config import ApplicationPaths, ConfigurationError
 from transcript_weaver.inp.dom import DomSource
@@ -109,7 +110,7 @@ def run(
         if invocation is not None:
             invocation.log.exception(type(exc).__name__)
             invocation.close(success=False)
-        print(f"trwinp: {exc}", file=stderr)
+        write_cli_error(stderr, "trwinp", exc)
         return int(getattr(exc, "status", ExitStatus.GENERAL_ERROR))
     except KeyboardInterrupt:
         if invocation is not None:

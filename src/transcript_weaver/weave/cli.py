@@ -12,6 +12,8 @@ from transcript_weaver.cli_common import (
     add_logging_arguments,
     add_version_argument,
     start_invocation,
+    write_cli_error,
+    write_cli_message,
 )
 from transcript_weaver.config import (
     ApplicationPaths,
@@ -25,9 +27,15 @@ from transcript_weaver.runtime import (
     RunIdError,
     apply_log_retention,
     ensure_packet_run_id,
+    write_debug_artifact,
     write_preservation_artifacts,
 )
-from transcript_weaver.weave.core import PreservationError, WeaveError, transform
+from transcript_weaver.weave.core import (
+    PreservationError,
+    ResponseValidationError,
+    WeaveError,
+    transform,
+)
 from transcript_weaver.weave.provider import Provider
 
 
@@ -70,7 +78,7 @@ def run(
         config = load_or_create_config(effective_paths)
         if args.prompt_or_profile is None:
             raise ConfigurationError(
-                "No weave profile or prompt file was provided. "
+                "No weave profile or prompt file was provided.\n"
                 f"Available profiles: {available_profiles(config.weave)}."
             )
         packet = _read_packet(stdin)
@@ -97,6 +105,43 @@ def run(
         stdout.write(json.dumps(enriched, ensure_ascii=False, indent=2) + "\n")
         invocation.close(success=True)
         return 0
+    except ResponseValidationError as exc:
+        if invocation is not None:
+            if args.debug_artifacts:
+                try:
+                    artifact_path = write_debug_artifact(
+                        invocation.paths.log_directory,
+                        invocation.run_id,
+                        "trweave",
+                        suffix="provider-response",
+                        extension=".txt",
+                        content=exc.response,
+                    )
+                    invocation.warning(
+                        "saved sensitive raw provider response to "
+                        f"{artifact_path}; inspect it before sharing"
+                    )
+                    apply_log_retention(
+                        invocation.paths.log_directory,
+                        invocation.config.logging.retained_runs,
+                        current_run_id=invocation.run_id,
+                        warn=invocation.warning,
+                    )
+                except (DiagnosticError, OSError) as artifact_error:
+                    invocation.warning(
+                        f"could not save sensitive raw provider response: {artifact_error}"
+                    )
+            invocation.log.exception(f"{type(exc).__name__}: {exc}")
+            invocation.close(success=False)
+        write_cli_error(stderr, "trweave", exc)
+        if not args.debug_artifacts:
+            write_cli_message(
+                stderr,
+                "A raw response could help diagnose this failure, but it may contain the "
+                "complete input and private information. Run 'trwprep artifacts enable', "
+                "then repeat this command with --debug-artifacts.",
+            )
+        return 1
     except PreservationError as exc:
         if invocation is not None:
             failure_directory = invocation.paths.log_directory / "packet-failures"
@@ -123,7 +168,7 @@ def run(
                 )
             invocation.log.exception(f"{type(exc).__name__}: {exc}")
             invocation.close(success=False)
-        print(f"trweave: {exc}", file=stderr)
+        write_cli_error(stderr, "trweave", exc)
         return 1
     except (
         ConfigurationError,
@@ -135,7 +180,7 @@ def run(
         if invocation is not None:
             invocation.log.exception(f"{type(exc).__name__}: {exc}")
             invocation.close(success=False)
-        print(f"trweave: {exc}", file=stderr)
+        write_cli_error(stderr, "trweave", exc)
         return 1
 
 

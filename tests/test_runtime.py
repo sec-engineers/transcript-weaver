@@ -148,8 +148,18 @@ def test_byte_artifact_and_invalid_stage_extension(tmp_path: Path) -> None:
     assert png.read_bytes() == b"png-bytes"
     with pytest.raises(DiagnosticError):
         build_diagnostic_path(tmp_path, RUN1, "bad-stage", extension=".log")
+    text = write_debug_artifact(
+        tmp_path,
+        RUN1,
+        "trweave",
+        suffix="provider-response",
+        extension=".txt",
+        content="not json",
+    )
+    assert text.read_text() == "not json"
+    assert text.stat().st_mode & 0o777 == 0o600
     with pytest.raises(DiagnosticError):
-        build_diagnostic_path(tmp_path, RUN1, "trwinp", extension=".txt")
+        build_diagnostic_path(tmp_path, RUN1, "trwinp", extension=".pdf")
 
 
 def test_sensitive_preservation_artifacts_are_json_and_retained_by_run(

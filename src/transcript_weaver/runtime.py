@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -19,9 +20,9 @@ ARTIFACT_SUFFIX_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DIAGNOSTIC_FILE_PATTERN = re.compile(
     r"^(?P<run>\d{8}-\d{6}-[0-9a-f]{4})-"
     r"(?P<stage>trwinp|trweave|trwout)(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
-    r"(?P<extension>\.log|\.html|\.png|\.json)$"
+    r"(?P<extension>\.log|\.html|\.png|\.json|\.txt)$"
 )
-SUPPORTED_EXTENSIONS = {".log", ".html", ".png", ".json"}
+SUPPORTED_EXTENSIONS = {".log", ".html", ".png", ".json", ".txt"}
 
 
 class RunIdError(ValueError):
@@ -170,11 +171,12 @@ def write_debug_artifact(
 ) -> Path:
     log_directory.mkdir(parents=True, exist_ok=True)
     path = build_diagnostic_path(log_directory, run_id, stage, extension=extension, suffix=suffix)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     if isinstance(content, bytes):
-        with path.open("xb") as stream:
+        with os.fdopen(descriptor, "wb") as stream:
             stream.write(content)
     else:
-        with path.open("x", encoding="utf-8") as stream:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             stream.write(content)
     return path
 

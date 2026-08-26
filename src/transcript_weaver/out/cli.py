@@ -12,6 +12,7 @@ from transcript_weaver.cli_common import (
     add_logging_arguments,
     add_version_argument,
     start_invocation,
+    write_cli_error,
 )
 from transcript_weaver.config import (
     ApplicationPaths,
@@ -69,7 +70,7 @@ def run(
         config = load_or_create_config(effective_paths)
         if args.output_profile is None:
             raise ConfigurationError(
-                "No output profile was provided. "
+                "No output profile was provided.\n"
                 f"Available profiles: {available_profiles(config.out)}."
             )
         packet = _read_packet(stdin)
@@ -95,7 +96,7 @@ def run(
         if invocation is not None:
             invocation.log.exception(type(exc).__name__)
             invocation.close(success=False)
-        print(f"trwout: {exc}", file=stderr)
+        write_cli_error(stderr, "trwout", exc)
         return 1
 
 

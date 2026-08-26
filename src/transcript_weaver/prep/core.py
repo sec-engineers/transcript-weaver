@@ -25,7 +25,7 @@ from transcript_weaver.browser import (
 from transcript_weaver.inp.errors import SourceUnavailableError
 
 
-def _confirm(prompt: str, *, stdin: TextIO, stdout: TextIO, default: bool = False) -> bool:
+def confirm(prompt: str, *, stdin: TextIO, stdout: TextIO, default: bool = False) -> bool:
     suffix = " [Y/n] " if default else " [y/N] "
     stdout.write(prompt + suffix)
     stdout.flush()
@@ -54,7 +54,7 @@ def _choose_otter_profile(*, stdin: TextIO, stdout: TextIO) -> str:
         f"  {legacy}\n"
         "It may contain your authenticated Otter session.\n"
     )
-    if _confirm("Continue using this existing profile?", stdin=stdin, stdout=stdout, default=True):
+    if confirm("Continue using this existing profile?", stdin=stdin, stdout=stdout, default=True):
         return legacy
     stdout.write(f"TRW will use the new profile at:\n  {preferred}\n")
     return preferred
@@ -73,7 +73,7 @@ def _ensure_forwarding(spec: BrowserSpec, *, stdin: TextIO, stdout: TextIO) -> N
         stdout.write(f"  {command}\n")
     guide = f"docs/{spec.name.casefold()}.md"
     stdout.write(f"A full explanation is available in the TRW guide: {guide}\n")
-    if not _confirm(
+    if not confirm(
         "Configure the Windows port-forwarding and firewall rules now?",
         stdin=stdin,
         stdout=stdout,

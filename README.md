@@ -94,10 +94,10 @@ When Otter exposes a reliable media duration, `trwinp` records it as
 
 ## Configuration
 
-On first use, the packaged schema-v1 configuration and prototype-derived
-`prompts/example.md` are copied atomically to the platform's per-user configuration
-directory. Existing files are never merged, migrated, repaired, or overwritten. Tests
-always inject disposable paths.
+On first use, the packaged schema-v1 configuration, Frank's journal prompt, and
+David's LinkedIn structured-extraction prompt are copied atomically to the platform's
+per-user configuration directory. Existing files are never merged, migrated, repaired,
+or overwritten. Tests always inject disposable paths.
 
 Older configuration files are not automatically migrated. If you want to replace an
 early prototype configuration with the complete example, first back it up and then run
@@ -127,6 +127,10 @@ A coherent configuration looks like this:
     "franks-example": {
       "provider": "gemini",
       "prompt_file": "prompts/example.md"
+    },
+    "davids-linkedin-example": {
+      "provider": "gemini",
+      "prompt_file": "prompts/linkedin-profile.md"
     }
   },
   "out": {
@@ -232,10 +236,21 @@ The implementation uses Gemini's REST API directly, requests JSON, and retries
 transient network errors and HTTP 429/5xx responses up to four times, waiting 1,
 4, 9, and 16 seconds. Every retry is reported on standard error and is also
 written to the persistent run log when `--log` is enabled. Every input field
-is immutable. If the provider replaces `transcript`, Weaver preserves the original
-and uses that attempted replacement only when needed to populate
-`weave.update_transcript`; no duplicate top-level transformed-text field is emitted. Other deleted or modified input fields remain errors. Fenced, explanatory,
-partial, non-object, or invalid `weave` responses are rejected.
+is immutable. The preferred provider response contains only a nonempty top-level
+`weave` object, whose internal structure is defined by the selected prompt. Weaver
+merges that object into its authoritative stdin packet locally, so the provider never
+needs to reproduce a large transcript or DOM. Legacy complete-packet responses remain
+accepted and receive the existing preservation validation. If a legacy provider
+replaces `transcript`, Weaver preserves the original and uses that attempted replacement
+only when needed to populate `weave.update_transcript`; no duplicate top-level
+transformed-text field is emitted. Other deleted or modified input fields remain errors.
+Fenced, explanatory, partial, non-object, or empty `weave` responses are rejected.
+
+The packaged `davids-linkedin-example` demonstrates structured extraction rather than
+transcript cleanup. It adds available profile facts beneath `weave.linkedin`, omitting
+unsupported fields instead of emitting empty or invented values. This is an example
+prompt, not a LinkedIn restriction in `trweave`; users may define other structures and
+source types in their own prompts.
 
 ## Output
 
@@ -268,6 +283,21 @@ optional, grouped by run ID, and retained according to `logging.retained_runs`.
 They may contain stage, profile, model, operation, relative destination, timing,
 and sanitized failure information. Ordinary logs never contain transcripts, prompts,
 transformed content, provider bodies, credentials, or complete journals.
+
+Sensitive debug capture uses two deliberate steps. First run `trwprep artifacts
+enable`, review and accept its warning, and then add `--debug-artifacts` to a specific
+pipeline invocation. Permission lasts one hour, applies to all TRW pipeline commands,
+and may be inspected or revoked immediately with `trwprep artifacts status` or
+`trwprep artifacts disable`. Permission alone captures nothing, and the command-line
+switch is refused without current permission. On Linux, the user-editable permission
+record is stored beneath the per-user runtime directory, normally at
+`/run/user/<uid>/transcript-weaver/debug-artifacts-permission.json`; it contains only
+enablement and expiration times, never captured content.
+
+When `trweave --debug-artifacts` receives an invalid provider result, it stores the raw
+response as `<run-id>-trweave-provider-response.txt` in the per-user log directory.
+That response may contain the complete original transcript or DOM as well as extracted
+private information. Successful provider responses are not retained.
 
 If a provider changes or deletes an immutable packet field, `trweave` writes the
 complete original and provider JSON documents under

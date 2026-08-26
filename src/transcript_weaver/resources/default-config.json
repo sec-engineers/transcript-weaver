@@ -25,6 +25,15 @@
       ],
       "provider": "gemini",
       "prompt_file": "prompts/example.md"
+    },
+    "davids-linkedin-example": {
+      "_comment": [
+        "This structured-extraction example asks the provider to",
+        "extract profile facts from a captured LinkedIn DOM.",
+        "Its output is placed beneath weave.linkedin."
+      ],
+      "provider": "gemini",
+      "prompt_file": "prompts/linkedin-profile.md"
     }
   },
   "out": {

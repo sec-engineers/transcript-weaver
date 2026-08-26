@@ -200,11 +200,13 @@ def test_repeated_otter_prep_reuses_browser_and_shows_otter(
 def test_trwprep_cli_help_version_and_error(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     help_text = prep_cli.build_parser().format_help()
     assert "dom" in help_text and "otter" in help_text
+    assert "trwprep artifacts {enable,status,disable}" in help_text
+    assert max(map(len, help_text.splitlines())) <= 72
 
     with pytest.raises(SystemExit) as caught:
         prep_cli.run(["--version"])
     assert caught.value.code == 0
-    assert "trwprep 1.1.0003" in capsys.readouterr().out
+    assert "trwprep 1.1.0004" in capsys.readouterr().out
 
     def fail(*args: object, **kwargs: object) -> None:
         raise SourceUnavailableError("not ready")
@@ -213,6 +215,42 @@ def test_trwprep_cli_help_version_and_error(monkeypatch: pytest.MonkeyPatch, cap
     stderr = io.StringIO()
     assert prep_cli.run(["dom"], stderr=stderr) == 1
     assert stderr.getvalue() == "trwprep: not ready\n"
+
+
+def test_trwprep_artifact_permission_workflow(tmp_path) -> None:
+    from transcript_weaver.config import ApplicationPaths
+
+    paths = ApplicationPaths(tmp_path / "config.json", tmp_path / "log", tmp_path / "runtime")
+    stdout = io.StringIO()
+    assert (
+        prep_cli.run(
+            ["artifacts", "enable"], stdin=io.StringIO("yes\n"), stdout=stdout, paths=paths
+        )
+        == 0
+    )
+    assert "WARNING" in stdout.getvalue()
+    assert "one hour" in stdout.getvalue()
+    warning = stdout.getvalue().split("Permit --debug-artifacts", 1)[0]
+    assert max(map(len, warning.splitlines())) <= 72
+    assert (tmp_path / "runtime" / "debug-artifacts-permission.json").exists()
+
+    extended = io.StringIO()
+    assert (
+        prep_cli.run(["artifacts", "enable"], stdin=io.StringIO(), stdout=extended, paths=paths)
+        == 0
+    )
+    assert "extended for one hour" in extended.getvalue()
+    assert "WARNING" not in extended.getvalue()
+    assert "[y/N]" not in extended.getvalue()
+
+    status = io.StringIO()
+    assert prep_cli.run(["artifacts", "status"], stdout=status, paths=paths) == 0
+    assert "is enabled" in status.getvalue()
+    assert "Expires:" in status.getvalue()
+
+    disabled = io.StringIO()
+    assert prep_cli.run(["artifacts", "disable"], stdout=disabled, paths=paths) == 0
+    assert "permission disabled" in disabled.getvalue()
 
 
 def test_browser_specs_and_forwarding_detection(monkeypatch: pytest.MonkeyPatch) -> None:

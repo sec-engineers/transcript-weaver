@@ -11,6 +11,7 @@ from transcript_weaver.config import (
     load_or_create_config,
     packaged_default_config_bytes,
     packaged_example_prompt_bytes,
+    packaged_linkedin_prompt_bytes,
     validate_config,
 )
 
@@ -153,14 +154,16 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
 ) -> None:
     config = load_or_create_config(app_paths)
     prompt_path = app_paths.config_file.parent / "prompts" / "example.md"
+    linkedin_prompt_path = app_paths.config_file.parent / "prompts" / "linkedin-profile.md"
     assert prompt_path.read_bytes() == packaged_example_prompt_bytes()
+    assert linkedin_prompt_path.read_bytes() == packaged_linkedin_prompt_bytes()
     assert "dream|gratitude|ses|sacred|unknown" in prompt_path.read_text()
     vault = config.out["franks-example"]["vault"]
     assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
     stored = json.loads(app_paths.config_file.read_text())
     assert stored["out"]["franks-example"]["vault"]["_comment"]
     assert config.providers["gemini"]["model"] == "gemini-3.5-flash-lite"
-    assert set(config.weave) == {"franks-example"}
+    assert set(config.weave) == {"franks-example", "davids-linkedin-example"}
     assert set(config.out) == {"franks-example"}
     raw_config = app_paths.config_file.read_text()
     assert max(map(len, raw_config.splitlines())) <= 75
@@ -191,6 +194,9 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     prompt = prompt_path.read_text()
     assert "around 72 characters" in prompt
     assert "greater than 300" in prompt
+    linkedin_prompt = linkedin_prompt_path.read_text()
+    assert "weave" in linkedin_prompt and "linkedin" in linkedin_prompt
+    assert "Omit any field" in linkedin_prompt
 
 
 def test_first_run_never_overwrites_existing_example_prompt(

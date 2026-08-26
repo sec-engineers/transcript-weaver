@@ -22,7 +22,12 @@ from transcript_weaver.out.core import (
 )
 from transcript_weaver.profiles import extract_dotted, find_profile, resolve_configured_path
 from transcript_weaver.weave import cli as weave_cli
-from transcript_weaver.weave.core import WeaveError, resolve_prompt, validate_response
+from transcript_weaver.weave.core import (
+    ResponseValidationError,
+    WeaveError,
+    resolve_prompt,
+    validate_response,
+)
 from transcript_weaver.weave.provider import GeminiProvider, ProviderError, build_provider
 
 RUN = "20260805-120000-a1b2"
@@ -207,6 +212,109 @@ def test_strict_response_preservation() -> None:
         validate_response(json.dumps(deleted), original)
 
 
+def test_weave_only_response_is_merged_into_authoritative_input() -> None:
+    original = packet()
+    before = json.loads(json.dumps(original))
+    response = {
+        "weave": {
+            "linkedin": {
+                "full_name": "David Example",
+                "email": "david@example.com",
+            }
+        }
+    }
+
+    result = validate_response(json.dumps(response), original)
+
+    assert original == before
+    assert {key: result[key] for key in original} == original
+    assert result["weave"] == response["weave"]
+
+
+def test_weave_only_response_adds_without_replacing_existing_results() -> None:
+    original = packet()
+    original["weave"] = {"prior": {"kept": "yes"}}
+    response = {"weave": {"prior": {"added": "new"}}}
+
+    result = validate_response(json.dumps(response), original)
+
+    assert result["weave"] == {"prior": {"kept": "yes", "added": "new"}}
+    assert original["weave"] == {"prior": {"kept": "yes"}}
+
+    collision = {"weave": {"prior": {"kept": "changed"}}}
+    with pytest.raises(ResponseValidationError, match="attempted to replace"):
+        validate_response(json.dumps(collision), original)
+
+
+def test_structured_weave_does_not_require_journal_fields() -> None:
+    original = packet()
+    enriched = json.loads(json.dumps(original))
+    enriched["weave"] = {
+        "linkedin": {
+            "full_name": "David Example",
+            "first_name": "David",
+            "last_name": "Example",
+        }
+    }
+
+    assert validate_response(json.dumps(enriched), original) == enriched
+
+    enriched["weave"] = {}
+    with pytest.raises(WeaveError, match="nonempty top-level weave"):
+        validate_response(json.dumps(enriched), original)
+
+    for field in ("type", "update_transcript"):
+        enriched["weave"] = {"linkedin": {"full_name": "David Example"}, field: ""}
+        with pytest.raises(WeaveError, match=rf"weave\.{field} must be a nonempty string"):
+            validate_response(json.dumps(enriched), original)
+
+
+def test_invalid_provider_response_debug_artifact_requires_permission(tmp_path: Path) -> None:
+    from transcript_weaver.artifacts import enable_permission
+
+    class BrokenProvider(FakeProvider):
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            return '{"broken":'
+
+    configured_paths = paths_with_config(tmp_path)
+    paths = ApplicationPaths(
+        configured_paths.config_file,
+        configured_paths.log_directory,
+        tmp_path / "runtime",
+    )
+    stderr = io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup"],
+            stdin=io.StringIO(json.dumps(packet())),
+            stderr=stderr,
+            paths=paths,
+            provider=BrokenProvider(),
+        )
+        == 1
+    )
+    assert "trwprep artifacts enable" in stderr.getvalue()
+    assert not list(paths.log_directory.glob("*-provider-response.txt"))
+
+    enable_permission(paths.runtime_directory)
+    stderr = io.StringIO()
+    assert (
+        weave_cli.run(
+            ["cleanup", "--debug-artifacts"],
+            stdin=io.StringIO(json.dumps(packet())),
+            stderr=stderr,
+            paths=paths,
+            provider=BrokenProvider(),
+        )
+        == 1
+    )
+    artifacts = list(paths.log_directory.glob("*-trweave-provider-response.txt"))
+    assert len(artifacts) == 1
+    assert artifacts[0].read_text() == '{"broken":'
+    assert artifacts[0].stat().st_mode & 0o777 == 0o600
+    assert "saved sensitive raw provider response" in stderr.getvalue()
+
+
 def test_provider_transcript_change_becomes_added_debug_field() -> None:
     original = packet()
     provider_output = json.loads(json.dumps(original))
@@ -280,6 +388,34 @@ def test_weave_cli_success_and_secret_safe_log(tmp_path: Path) -> None:
     assert "JSON-to-JSON" in fake.calls[0][0] and fake.calls[0][1] == "Clean safely"
 
 
+def test_weave_cli_merges_preferred_fragment_response(tmp_path: Path) -> None:
+    class FragmentProvider(FakeProvider):
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            self.calls.append((system, prompt, packet_json))
+            return json.dumps({"weave": {"linkedin": {"full_name": "David Example"}}})
+
+    paths = paths_with_config(tmp_path)
+    provider = FragmentProvider()
+    source = packet()
+    stdout = io.StringIO()
+
+    assert (
+        weave_cli.run(
+            ["cleanup"],
+            stdin=io.StringIO(json.dumps(source)),
+            stdout=stdout,
+            paths=paths,
+            provider=provider,
+        )
+        == 0
+    )
+    result = json.loads(stdout.getvalue())
+    assert {key: result[key] for key in source} == source
+    assert result["weave"] == {"linkedin": {"full_name": "David Example"}}
+    assert "only top-level field must be weave" in provider.calls[0][0]
+    assert "PRIVATE" in provider.calls[0][2]
+
+
 @pytest.mark.parametrize(
     ("duration", "expected"),
     [(300, "gratitude"), (300.001, "unknown")],
@@ -304,6 +440,31 @@ def test_reliable_duration_deterministically_routes_long_recordings(
     result = json.loads(stdout.getvalue())
     assert result["weave"] == {"type": expected, "update_transcript": "- Still cleaned"}
     assert result["metadata"]["duration_seconds"] == duration
+
+
+def test_duration_rule_does_not_require_structured_result_type(tmp_path: Path) -> None:
+    class StructuredProvider(FakeProvider):
+        def transform(self, system: str, prompt: str, packet_json: str) -> str:
+            value = json.loads(packet_json)
+            value["weave"] = {"linkedin": {"full_name": "David Example"}}
+            return json.dumps(value)
+
+    paths = paths_with_config(tmp_path)
+    source = packet()
+    source["metadata"]["duration_seconds"] = 301
+    stdout = io.StringIO()
+
+    assert (
+        weave_cli.run(
+            ["cleanup"],
+            stdin=io.StringIO(json.dumps(source)),
+            stdout=stdout,
+            paths=paths,
+            provider=StructuredProvider(),
+        )
+        == 0
+    )
+    assert json.loads(stdout.getvalue())["weave"] == {"linkedin": {"full_name": "David Example"}}
 
 
 def test_packet_version_is_informational_and_never_a_compatibility_gate(
@@ -478,7 +639,7 @@ def test_final_provider_reason_reaches_stderr_and_enabled_log(tmp_path: Path) ->
         == 1
     )
     reason = "daily request limit exceeded"
-    assert reason in stderr.getvalue()
+    assert reason in " ".join(stderr.getvalue().split())
     logs = list(paths.log_directory.glob("*-trweave.log"))
     assert len(logs) == 1
     assert reason in logs[0].read_text()

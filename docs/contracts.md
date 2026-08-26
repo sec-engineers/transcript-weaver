@@ -10,26 +10,31 @@ media duration is stored as `metadata.duration_seconds`.
 
 ## Configuration
 
-First-run setup atomically provisions `config.json` and `prompts/example.md`. Existing
-files are never overwritten. Configuration errors identify their full field path and
-list missing or unexpected fields. Vault path objects use `relative_to` values `cwd` or
-`config` for relative paths and omit it for absolute or `~` paths. Reserved `_comment`
-keys provide inline documentation and are ignored by runtime validation.
+First-run setup atomically provisions `config.json` and its example prompt files.
+Existing files are never overwritten. Configuration errors identify their full field
+path and list missing or unexpected fields. Vault path objects use `relative_to` values
+`cwd` or `config` for relative paths and omit it for absolute or `~` paths. Reserved
+`_comment` keys provide inline documentation and are ignored by runtime validation.
 
 ## `trweave PROMPT_OR_PROFILE`
 
 Reads exactly one JSON object and emits exactly one enriched JSON object. Direct
 prompt paths use Gemini; profiles name both provider and either inline `prompt`
-or `prompt_file`. Every original field is immutable and the provider may only add
-fields. The result must contain a usable `weave` object with nonempty `type` and
-`content` strings. A provider replacement for `transcript` is retained as the added
-nested `weave.update_transcript` field while the original `transcript` remains exact.
-No duplicate top-level transformed-transcript field is emitted.
+or `prompt_file`. Every original field is immutable. The preferred provider response
+contains only a nonempty top-level `weave` object; `trweave` merges it into the
+authoritative input packet locally. The selected prompt defines the contents beneath
+`weave`. When `weave.type` or `weave.update_transcript` is present, it must retain its
+established nonempty-string form. Legacy providers may still return a complete enriched
+packet and receive strict preservation validation. A legacy provider replacement for
+`transcript` is retained as the added nested `weave.update_transcript` field when that
+compatibility recovery is possible, while the original `transcript` remains exact. No
+duplicate top-level transformed-transcript field is emitted.
 Other changed or deleted input fields are errors. A packet's `trw_version` is
 informational only: it is preserved exactly when present, but never used to reject a
 packet or decide compatibility, and legacy packets without it remain accepted. A
-reliable duration greater than 300 seconds deterministically overrides the returned
-category to `unknown`; exactly 300 seconds does not.
+reliable duration greater than 300 seconds deterministically overrides a returned
+`weave.type` category to `unknown`; structured results without `weave.type` are
+unaffected. Exactly 300 seconds does not trigger the override.
 
 ## `trwout OUTPUT_PROFILE`
 
@@ -52,6 +57,10 @@ content, secrets, and journal contents. The exception is an immutable-field fail
 `trweave` saves complete `original.json` and `provider.json` packets beneath the
 per-user `packet-failures` directory. They are sensitive, named by run ID, and retained
 according to `logging.retained_runs` so failures are diffable without unbounded growth.
+Sensitive debug artifacts require both a current one-hour permission created by
+`trwprep artifacts enable` and `--debug-artifacts` on the individual pipeline command.
+An invalid `trweave` provider response is retained only with both forms of consent and
+may contain the complete input packet. Successful provider responses are not retained.
 
 ## Distribution build
 
