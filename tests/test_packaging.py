@@ -17,6 +17,7 @@ def test_playwright_is_a_standard_dependency_without_otter_extra() -> None:
     assert "playwright>=1.45,<2" in project["dependencies"]
     assert "otter" not in project.get("optional-dependencies", {})
     assert "all" not in project.get("optional-dependencies", {})
+    assert project["scripts"]["trwprep"] == "transcript_weaver.prep.cli:main"
 
 
 def test_project_version_has_one_dynamic_source_and_packet_format() -> None:

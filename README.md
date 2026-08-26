@@ -18,16 +18,17 @@ For local development from a repository checkout:
 python3 -m pip install --editable .
 ```
 
-Otter acquisition currently supports WSL on Windows and controls the user's existing
-Windows Chrome through Chrome DevTools integration. Browser automation is intentional:
+DOM and Otter acquisition currently support WSL on Windows and control dedicated
+Windows Chrome profiles through Chrome DevTools integration. Browser automation is intentional:
 Otter currently reserves its supported public API for Enterprise workspaces. The
 Playwright Python dependency is installed with Transcript Weaver, but Weaver does not
-require Playwright to download or maintain a separate bundled browser. Windows Chrome,
-WSL-to-Windows connectivity, a dedicated Chrome profile, and one-time port-proxy setup
-are still required; see
+require Playwright to download or maintain a separate bundled browser. Run
+`trwprep dom` or `trwprep otter` to prepare the corresponding Chrome profile and
+consent-based WSL connectivity. See
+[`docs/dom.md`](https://github.com/sec-engineers/transcript-weaver/blob/main/docs/dom.md)
+and
 [`docs/otter.md`](https://github.com/sec-engineers/transcript-weaver/blob/main/docs/otter.md)
-for the rationale and setup
-instructions before attempting `trwinp otter`.
+for details.
 
 ```text
 trwinp -> normalized JSON -> trweave -> enriched JSON -> trwout
@@ -40,6 +41,16 @@ trwinp otter | trweave franks-example | trwout franks-example
 Standard output is reserved for JSON packets. Diagnostics and errors use standard
 error. Ordinary successful operation is silent except that `trwinp` and `trweave`
 emit their packet. `trwout` writes a file and emits no normal output.
+
+`trwprep` is an interactive setup utility rather than a pipeline stage:
+
+```bash
+trwprep dom
+trwprep otter
+```
+
+It may explain local setup, ask before requesting Windows elevation, and leave a
+dedicated Chrome instance running for later acquisition.
 
 ## Packet contract
 
@@ -252,7 +263,7 @@ word-boundary wrapping while keeping long-form unknown content substantially ver
 
 ## Logging and privacy
 
-All commands accept `--log`, `--verbose`, and `--debug-artifacts`. Logs are
+All three pipeline commands accept `--log`, `--verbose`, and `--debug-artifacts`. Logs are
 optional, grouped by run ID, and retained according to `logging.retained_runs`.
 They may contain stage, profile, model, operation, relative destination, timing,
 and sanitized failure information. Ordinary logs never contain transcripts, prompts,

@@ -14,6 +14,7 @@ from transcript_weaver.cli_common import (
     start_invocation,
 )
 from transcript_weaver.config import ApplicationPaths, ConfigurationError
+from transcript_weaver.inp.dom import DomSource
 from transcript_weaver.inp.errors import ExitStatus, InputError
 from transcript_weaver.inp.otter import OtterSource
 from transcript_weaver.inp.sources import FileSource, StdinSource
@@ -59,6 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser = subparsers.add_parser("file", help="read a UTF-8 text file")
     file_parser.add_argument("path", type=Path, help="path to a UTF-8 text file")
     _add_stage_logging(file_parser)
+    dom_parser = subparsers.add_parser(
+        "dom", help="capture the current DOM from the prepared TRW Chrome browser"
+    )
+    _add_stage_logging(dom_parser)
     otter_parser = subparsers.add_parser("otter", help="acquire the newest visible Otter recording")
     _add_stage_logging(otter_parser)
     return parser
@@ -85,6 +90,9 @@ def run(
         elif args.mode == "file":
             invocation.log.info("Acquiring transcript from UTF-8 text file")
             acquired = FileSource(args.path).acquire()
+        elif args.mode == "dom":
+            invocation.log.info("Capturing current DOM from prepared Chrome browser")
+            acquired = DomSource().acquire()
         else:
             invocation.log.info("Starting Otter acquisition")
             acquired = OtterSource(

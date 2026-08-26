@@ -272,7 +272,7 @@ def test_missing_input_mode_lists_valid_modes(args: list[str], capsys) -> None:
     assert caught.value.code == 2
     error = capsys.readouterr().err
     assert "trwinp: error: the following arguments are required: mode\n" in error
-    assert "Valid modes: stdin, file, otter\n" in error
+    assert "Valid modes: stdin, file, dom, otter\n" in error
 
 
 @pytest.mark.parametrize(
@@ -284,7 +284,7 @@ def test_command_version_exits_without_normal_arguments(module, command: str, ca
         module.run(["--version"])
     assert caught.value.code == 0
     assert capsys.readouterr().out == (
-        f"{command} 1.1.0002\nSchema currently used: {SCHEMA_VERSION}\n"
+        f"{command} 1.1.0003\nSchema currently used: {SCHEMA_VERSION}\n"
     )
 
 
@@ -368,6 +368,30 @@ def test_file_cli_success_and_mocked_otter_branch(
     assert stderr.getvalue() == ""
 
 
+def test_mocked_dom_cli_emits_html_packet(
+    app_paths: ApplicationPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeDomSource:
+        def acquire(self) -> AcquiredTranscript:
+            return AcquiredTranscript(
+                "<html><body>current</body></html>",
+                datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc),
+                Source("dom", "Current page", "https://www.linkedin.com/in/example"),
+            )
+
+    monkeypatch.setattr(cli, "DomSource", FakeDomSource)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    assert cli.run(["dom"], stdout=stdout, stderr=stderr, paths=app_paths) == 0
+    packet = json.loads(stdout.getvalue())
+    assert packet["source"] == {
+        "type": "dom",
+        "name": "Current page",
+        "reference": "https://www.linkedin.com/in/example",
+    }
+    assert packet["transcript"] == "<html><body>current</body></html>"
+    assert stderr.getvalue() == ""
+
+
 @pytest.mark.parametrize("module", [weave_cli, out_cli])
 def test_downstream_rejects_invalid_json_and_unsafe_run(
     module, app_paths: ApplicationPaths
@@ -420,6 +444,8 @@ def test_trwinp_help_discovers_all_input_methods() -> None:
     assert "read UTF-8 transcript text from standard input" in help_text
     assert "file" in help_text
     assert "read a UTF-8 text file" in help_text
+    assert "dom" in help_text
+    assert "capture the current DOM" in help_text
     assert "otter" in help_text
     assert "acquire the newest visible Otter recording" in help_text
 
@@ -472,22 +498,25 @@ def test_otter_closes_only_a_browser_it_started() -> None:
     from transcript_weaver.inp.otter import PlaywrightOtterClient
 
     class Session:
-        commands: list[str] = []
+        def __init__(self) -> None:
+            self.commands: list[str] = []
 
         def send(self, command: str) -> None:
             self.commands.append(command)
 
     class Context:
-        pages = [object()]
-        session = Session()
+        def __init__(self) -> None:
+            self.pages = [object()]
+            self.session = Session()
 
         def new_cdp_session(self, page: object) -> Session:
             assert page is self.pages[0]
             return self.session
 
     class Browser:
-        contexts = [Context()]
-        disconnected = False
+        def __init__(self) -> None:
+            self.contexts = [Context()]
+            self.disconnected = False
 
         def close(self) -> None:
             self.disconnected = True
@@ -510,8 +539,8 @@ def test_otter_closes_only_a_browser_it_started() -> None:
     browser = Browser()
     with client._managed_browser(browser):
         pass
-    assert browser.contexts[0].session.commands == ["Browser.close"]
-    assert browser.disconnected
+    assert browser.contexts[0].session.commands == []
+    assert not browser.disconnected
 
 
 def test_otter_recording_navigation_resolves_relative_href() -> None:

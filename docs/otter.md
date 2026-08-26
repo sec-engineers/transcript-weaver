@@ -47,23 +47,47 @@ Before using Otter, provide:
 
 - WSL running on Windows.
 - Windows Chrome installed and reachable from WSL.
-- A dedicated Chrome profile for Otter automation rather than a daily-use profile.
-- A Windows port proxy that exposes Chrome's localhost debugging port `9222` to WSL on
-  gateway port `9223`, unless a custom reachable CDP endpoint is configured.
 - Manual Otter authentication in the dedicated Chrome profile.
 
 ## Expected setup path
 
 1. Install Transcript Weaver with the normal installation command above.
-2. Configure the Windows port proxy for the WSL-to-Windows CDP connection.
-3. Let Transcript Weaver start Windows Chrome with its dedicated automation profile, or
-   start Chrome yourself and disable automatic launch.
+2. Run `trwprep otter`.
+3. Approve Windows elevation only if you want TRW to create missing local
+   port-forwarding and firewall rules.
 4. Sign in to Otter manually when Chrome opens.
 5. Verify acquisition with `trwinp otter > packet.json`.
 
-By default, the adapter starts Windows Chrome on debugging port `9222` and reaches the
-Windows gateway port proxy on `9223`, matching the working prototype. An available CDP
-session is reused instead of opening another Chrome window.
+Preparation creates or reuses `%LOCALAPPDATA%\TRW-Chrome-Otter`, starts Windows
+Chrome on debugging port `9222`, and reaches it through WSL-facing port `9223`.
+The legacy `%LOCALAPPDATA%\Chrome-Otter-Automation` profile is detected and may
+be retained so an existing authenticated session is not discarded. Running
+`trwprep otter` repeatedly reuses the browser and leaves an Otter page visible.
+An available CDP session is reused instead of opening another Chrome window.
+
+## Why Windows elevation is requested
+
+Windows Chrome listens only on its own loopback address, while TRW runs inside
+WSL on a separate virtual network. If forwarding is missing, `trwprep otter`
+shows the exact commands it proposes to elevate. They have this form, with the
+current Windows-side and WSL IP addresses substituted before approval:
+
+```powershell
+netsh interface portproxy delete v4tov4 listenport=9223
+netsh interface portproxy add v4tov4 listenport=9223 listenaddress=<WINDOWS_WSL_HOST_IP> connectport=9222 connectaddress=127.0.0.1
+netsh advfirewall firewall delete rule name="TRW Chrome DevTools 9223"
+netsh advfirewall firewall add rule name="TRW Chrome DevTools 9223" dir=in action=allow protocol=TCP localip=<WINDOWS_WSL_HOST_IP> remoteip=<WSL_IP> localport=9223
+```
+
+The first pair replaces the WSL-facing port proxy that carries connections from
+port `9223` to Chrome's Windows-local DevTools port `9222`. The second pair
+replaces its inbound firewall rule. That rule is limited to TCP port `9223`, the
+current Windows WSL interface, and the current WSL address; it does not open the
+port generally to the local network. The delete commands make repeated setup
+safe and prevent stale definitions from accumulating.
+
+WSL addresses can change after Windows or WSL restarts. Running `trwprep otter`
+again displays the newly proposed addresses and can replace obsolete rules.
 
 Optional environment variables:
 

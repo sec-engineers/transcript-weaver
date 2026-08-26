@@ -11,10 +11,8 @@ from __future__ import annotations
 import importlib
 import os
 import re
-import subprocess
 import time
 import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -22,6 +20,17 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Protocol
 
+from transcript_weaver.browser import (
+    OTTER_SPEC,
+    cdp_ready,
+    cdp_url,
+    forwarding_ready,
+    selected_profile_path,
+    start_chrome,
+    wait_for_cdp,
+    windows_host_ip,
+    windows_local_appdata,
+)
 from transcript_weaver.inp.errors import (
     AuthenticationRequiredError,
     SourceUnavailableError,
@@ -32,6 +41,24 @@ from transcript_weaver.runtime import DiagnosticError, StageLog, write_debug_art
 
 OTTER_URL = "https://otter.ai/home"
 TITLE_LINK_SELECTOR = 'a[data-testid="conversation-title-link"][href*="/u/"]'
+
+
+def _windows_local_appdata() -> str:  # pragma: no cover - compatibility wrapper
+    return windows_local_appdata()
+
+
+def _windows_host_ip() -> str:  # pragma: no cover - compatibility wrapper
+    return windows_host_ip()
+
+
+def _cdp_ready(endpoint: str) -> bool:  # pragma: no cover - compatibility wrapper
+    return cdp_ready(endpoint)
+
+
+def _wait_for_cdp(
+    endpoint: str, *, sleep: Callable[[float], None], timeout_seconds: int = 300
+) -> None:  # pragma: no cover - compatibility wrapper
+    wait_for_cdp(endpoint, sleep=sleep, timeout_seconds=timeout_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,18 +234,24 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
 
     def capture_newest(self) -> OtterCapture:
         sync_api = _load_playwright()
-        cdp_url = self._cdp_url or f"http://{_windows_host_ip()}:9223"
+        cdp_url_value = self._cdp_url or cdp_url(OTTER_SPEC)
         if _env_flag("TRANSCRIPT_WEAVER_OTTER_START_CHROME", default=True):
-            if _cdp_ready(cdp_url):
+            if _cdp_ready(cdp_url_value):
                 self._log.info("Reusing existing Chrome DevTools session")
             else:
+                if self._cdp_url is None and not forwarding_ready(OTTER_SPEC):
+                    raise SourceUnavailableError(
+                        "Otter Chrome forwarding is not configured. Run 'trwprep otter' first."
+                    )
                 self._start_chrome()
-        _wait_for_cdp(cdp_url, sleep=self._sleep)
+        _wait_for_cdp(cdp_url_value, sleep=self._sleep, timeout_seconds=300)
 
         try:
             with (
                 sync_api.sync_playwright() as playwright,
-                self._managed_browser(playwright.chromium.connect_over_cdp(cdp_url)) as browser,
+                self._managed_browser(
+                    playwright.chromium.connect_over_cdp(cdp_url_value)
+                ) as browser,
             ):
                 if not browser.contexts:
                     raise SourceUnavailableError(
@@ -306,30 +339,10 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
             self._warning(f"could not write debug artifact for {suffix}: {exc}")
 
     def _start_chrome(self) -> None:
-        chrome_exe = os.environ.get(
-            "TRANSCRIPT_WEAVER_CHROME_EXE",
-            "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
-        )
         profile = os.environ.get("TRANSCRIPT_WEAVER_OTTER_PROFILE")
         if not profile:
-            profile = _windows_local_appdata() + r"\Chrome-Otter-Automation"
-        try:
-            subprocess.Popen(
-                [
-                    chrome_exe,
-                    "--remote-debugging-port=9222",
-                    "--remote-debugging-address=0.0.0.0",
-                    f"--user-data-dir={profile}",
-                    "--new-window",
-                    OTTER_URL,
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except OSError as exc:
-            raise SourceUnavailableError(
-                "Could not start Windows Chrome for Otter automation."
-            ) from exc
+            profile = selected_profile_path(OTTER_SPEC)
+        start_chrome(OTTER_SPEC, profile=profile, start_url=OTTER_URL)
         self._started_chrome = True
         self._log.info("Started dedicated Otter Chrome profile")
 
@@ -348,8 +361,8 @@ class PlaywrightOtterClient:  # pragma: no cover - exercised only by opt-in live
                     self._warning(
                         f"could not close dedicated Otter Chrome: {_exception_summary(exc)}"
                     )
-            with suppress(Exception):
-                browser.close()
+                with suppress(Exception):
+                    browser.close()
 
     def _wait_for_ready(self, page: Any) -> None:
         page.goto(OTTER_URL, wait_until="domcontentloaded")
@@ -497,63 +510,3 @@ def _env_flag(name: str, *, default: bool) -> bool:
     if value is None:
         return default
     return value.lower() not in {"0", "false", "no"}
-
-
-def _windows_local_appdata() -> str:  # pragma: no cover - WSL/Windows boundary
-    try:
-        result = subprocess.run(
-            ["cmd.exe", "/d", "/c", "echo", "%LOCALAPPDATA%"],
-            check=True,
-            text=True,
-            capture_output=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise SourceUnavailableError(
-            "Could not determine Windows LOCALAPPDATA for the Chrome profile."
-        ) from exc
-    value = result.stdout.strip()
-    if not value or "%" in value:
-        raise SourceUnavailableError("Windows LOCALAPPDATA was unavailable.")
-    return value
-
-
-def _windows_host_ip() -> str:  # pragma: no cover - WSL/Windows boundary
-    try:
-        result = subprocess.run(
-            ["ip", "route"],
-            check=True,
-            text=True,
-            capture_output=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise SourceUnavailableError("Could not inspect the WSL network route.") from exc
-    for line in result.stdout.splitlines():
-        parts = line.split()
-        if parts and parts[0] == "default" and len(parts) >= 3:
-            return parts[2]
-    raise SourceUnavailableError("Could not find the Windows host IP in the WSL route.")
-
-
-def _cdp_ready(cdp_url: str) -> bool:  # pragma: no cover - live browser boundary
-    try:
-        with urllib.request.urlopen(f"{cdp_url}/json/version", timeout=1) as response:
-            return int(response.status) == 200
-    except Exception:
-        return False
-
-
-def _wait_for_cdp(
-    cdp_url: str,
-    *,
-    sleep: Callable[[float], None],
-    timeout_seconds: int = 300,
-) -> None:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(f"{cdp_url}/json/version", timeout=2) as response:
-                if response.status == 200:
-                    return
-        except Exception:
-            sleep(0.5)
-    raise SourceUnavailableError("Chrome's DevTools endpoint did not become ready.")

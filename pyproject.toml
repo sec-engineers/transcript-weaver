@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 trwinp = "transcript_weaver.inp.cli:main"
+trwprep = "transcript_weaver.prep.cli:main"
 trweave = "transcript_weaver.weave.cli:main"
 trwout = "transcript_weaver.out.cli:main"
 
@@ -80,4 +81,3 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.10"
 strict = true
 packages = ["transcript_weaver"]
-
