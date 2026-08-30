@@ -307,7 +307,7 @@ def test_command_version_exits_without_normal_arguments(module, command: str, ca
         module.run(["--version"])
     assert caught.value.code == 0
     assert capsys.readouterr().out == (
-        f"{command} 1.1.0005\nSchema currently used: {SCHEMA_VERSION}\n"
+        f"{command} 1.1.0006\nSchema currently used: {SCHEMA_VERSION}\n"
     )
 
 

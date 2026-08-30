@@ -200,13 +200,14 @@ def test_repeated_otter_prep_reuses_browser_and_shows_otter(
 def test_trwprep_cli_help_version_and_error(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     help_text = prep_cli.build_parser().format_help()
     assert "dom" in help_text and "otter" in help_text
+    assert "validate-config" in help_text
     assert "trwprep artifacts {enable,status,disable}" in help_text
     assert max(map(len, help_text.splitlines())) <= 72
 
     with pytest.raises(SystemExit) as caught:
         prep_cli.run(["--version"])
     assert caught.value.code == 0
-    assert "trwprep 1.1.0005" in capsys.readouterr().out
+    assert "trwprep 1.1.0006" in capsys.readouterr().out
 
     def fail(*args: object, **kwargs: object) -> None:
         raise SourceUnavailableError("not ready")

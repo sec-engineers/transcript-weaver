@@ -349,16 +349,23 @@ def validate_config(value: Any, *, path: Path) -> AppConfig:
     if not isinstance(value, dict):
         raise ConfigurationError(f"Configuration {path} must be a JSON object.")
     sanitized = _without_comments(value, context=f"Configuration {path}")
+    schema = sanitized.get("schema_version")
+    if schema != CONFIG_SCHEMA_VERSION or isinstance(schema, bool):
+        if schema == 1 and not isinstance(schema, bool):
+            raise ConfigurationError(
+                f"Configuration {path} uses schema version 1, but this TRW release "
+                f"requires configuration schema version {CONFIG_SCHEMA_VERSION}. Run "
+                "'trwprep validate-config' to validate it and offer a supported update."
+            )
+        raise ConfigurationError(
+            f"Configuration {path} schema_version must be {CONFIG_SCHEMA_VERSION}; "
+            f"received {schema!r}. Run 'trwprep validate-config' for guidance."
+        )
     root = _require_fields(
         sanitized,
         required=REQUIRED_TOP_LEVEL_FIELDS,
         context=f"Configuration {path} top-level object",
     )
-    if root["schema_version"] != CONFIG_SCHEMA_VERSION or isinstance(root["schema_version"], bool):
-        raise ConfigurationError(
-            f"Configuration {path} schema_version must be {CONFIG_SCHEMA_VERSION}; "
-            f"received {root['schema_version']!r}."
-        )
     logging_value = _require_fields(
         root["logging"],
         required={"retained_runs"},

@@ -19,8 +19,9 @@ from transcript_weaver.artifacts import (
     read_permission,
 )
 from transcript_weaver.cli_common import add_version_argument, write_cli_error
-from transcript_weaver.config import ApplicationPaths, get_application_paths
+from transcript_weaver.config import ApplicationPaths, ConfigurationError, get_application_paths
 from transcript_weaver.inp.errors import SourceUnavailableError
+from transcript_weaver.prep.configuration import validate_or_offer_migration
 from transcript_weaver.prep.core import confirm, prepare_browser
 
 
@@ -44,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="target", required=True)
     subparsers.add_parser("dom", help="prepare the dedicated Chrome browser for DOM capture")
     subparsers.add_parser("otter", help="prepare the dedicated authenticated Otter browser")
+    subparsers.add_parser(
+        "validate-config",
+        help="validate configuration and offer a supported schema update",
+    )
     artifacts = subparsers.add_parser(
         "artifacts",
         help="manage permission; requires enable, status, or disable",
@@ -129,10 +134,16 @@ def run(
                 stdin=stdin,
                 stdout=stdout,
             )
+        elif args.target == "validate-config":
+            validate_or_offer_migration(
+                paths or get_application_paths(),
+                stdin=stdin,
+                stdout=stdout,
+            )
         else:
             prepare_browser(args.target, stdin=stdin, stdout=stdout)
         return 0
-    except (ArtifactPermissionError, SourceUnavailableError) as exc:
+    except (ArtifactPermissionError, ConfigurationError, SourceUnavailableError) as exc:
         write_cli_error(stderr, "trwprep", exc)
         return 1
 

@@ -122,6 +122,13 @@ prints a warning whenever used. See the complete
 [configuration reference](docs/configuration.md), including schema-1 migration,
 inheritance, overrides, output paths, examples, and security guidance.
 
+To validate the active configuration or receive an interactive, backed-up
+migration offer for the shipped schema-1 form, run:
+
+```bash
+trwprep validate-config
+```
+
 Run `trwinp --help`, `trweave --help`, `trwout --help`, or `trwprep --help` for
 the current command-line options.
 

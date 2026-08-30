@@ -97,9 +97,24 @@ report, or include it with diagnostic material.
 
 ## Migrating from schema version 1
 
-Schema version 1 provider blocks are intentionally not supported. Back up the
-existing file, move its provider name, model, and credential to the three global
-fields, and change `schema_version` to 2. For the former `pass` credential:
+Schema version 1 provider blocks are intentionally not supported during normal
+TRW operation. Validate the active configuration and, for the shipped
+single-provider schema-1 form, receive an interactive migration offer with:
+
+```bash
+trwprep validate-config
+```
+
+TRW shows the configuration path and planned changes before asking permission.
+If approved, it validates the complete converted configuration, creates a
+non-overwriting byte-for-byte schema-1 backup, and atomically replaces the
+active file. Declining or encountering an unsupported legacy shape leaves the
+configuration unchanged. API keys are not resolved or displayed during this
+process.
+
+For a manual migration, back up the existing file, move its provider name,
+model, and credential to the three global fields, and change `schema_version`
+to 2. For the former `pass` credential:
 
 ```json
 "api_key": "command(pass show api/gemini)"

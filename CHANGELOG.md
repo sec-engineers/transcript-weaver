@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0006 - 2026-08-29
+
+- Added `trwprep validate-config` to validate schema-2 configurations and offer
+  a confirmed, backed-up, atomic migration for the shipped schema-1 form.
+- Made ordinary schema-version failures identify the required version and lead
+  directly to the validation and migration helper.
+
 ## 1.1.0005 - 2026-08-29
 
 - Replaced named provider blocks with global provider, model, and explicit

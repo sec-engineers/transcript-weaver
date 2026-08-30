@@ -80,6 +80,22 @@ def test_invalid_existing_config_is_untouched(app_paths: ApplicationPaths) -> No
     assert app_paths.config_file.read_text() == "{broken"
 
 
+def test_schema_one_error_leads_to_validation_and_migration_helper(tmp_path: Path) -> None:
+    value = {
+        "schema_version": 1,
+        "logging": {"retained_runs": 5},
+        "providers": {},
+        "weave": {},
+        "out": {},
+    }
+    with pytest.raises(ConfigurationError) as caught:
+        validate_config(value, path=tmp_path / "config.json")
+    message = str(caught.value)
+    assert "uses schema version 1" in message
+    assert "requires configuration schema version 2" in message
+    assert "trwprep validate-config" in message
+
+
 def test_injected_platform_directories_are_used(tmp_path: Path) -> None:
     class FakeDirs:
         user_config_path = tmp_path / "xdg-config" / "transcript-weaver"
