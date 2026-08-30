@@ -67,19 +67,19 @@ def resolve_prompt(
     if not candidate.is_absolute():
         candidate = Path.cwd() / candidate
     if candidate.exists():
-        return _read_prompt(candidate), "gemini", str(candidate.resolve())
+        return _read_prompt(candidate), config.provider, str(candidate.resolve())
     try:
         profile_name, profile = find_profile(config.weave, argument, kind="weave")
     except ConfigurationError as exc:
         raise WeaveError(str(exc)) from exc
-    if set(profile) != {"provider", "prompt"} and set(profile) != {"provider", "prompt_file"}:
-        raise WeaveError(
-            f"Weave profile {profile_name!r} must contain provider and exactly one of "
-            "prompt or prompt_file."
-        )
-    provider = profile.get("provider")
+    provider = profile.get("provider", config.provider)
     if not isinstance(provider, str) or not provider:
         raise WeaveError(f"Weave profile {profile_name!r} provider must be a nonempty string.")
+    prompt_fields = {field for field in ("prompt", "prompt_file") if field in profile}
+    if len(prompt_fields) != 1:
+        raise WeaveError(
+            f"Weave profile {profile_name!r} must contain exactly one of prompt or prompt_file."
+        )
     if "prompt" in profile:
         prompt = profile["prompt"]
         if not isinstance(prompt, str) or not prompt.strip():
@@ -231,13 +231,18 @@ def transform(
 ) -> tuple[dict[str, Any], str, str]:
     prompt, provider_name, selected = resolve_prompt(argument, config, paths)
     try:
-        configured_name, provider_config = find_profile(
-            config.providers, provider_name, kind="provider"
+        profile = next(
+            (item for name, item in config.weave.items() if name == selected),
+            {},
         )
+        model = profile.get("model", config.model)
+        api_key = profile.get("api_key", config.api_key)
         active = provider or build_provider(
-            configured_name,
-            provider_config,
+            provider_name,
+            model,
+            api_key,
             retry_reporter=retry_reporter,
+            warning=retry_reporter,
         )
         response = active.transform(
             SYSTEM_INSTRUCTION, prompt, json.dumps(packet, ensure_ascii=False)

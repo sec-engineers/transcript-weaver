@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0005 - 2026-08-29
+
+- Replaced named provider blocks with global provider, model, and explicit
+  API-key-source defaults plus independent per-weave-profile overrides.
+- Added environment, protected-file, command, and discouraged literal API-key
+  sources with secret-safe failures and literal-use warnings.
+- Added a dedicated configuration reference and reduced the README to stable
+  configuration guidance and current-help pointers.
+- Added offline coverage for a controlled `trwinp otter` failure when no usable
+  recording is available.
+
 ## 1.1.0004 - 2026-08-26
 
 - Generalized `trweave` so prompts may add any nonempty structured result

@@ -1,3 +1,3 @@
 """Authoritative Transcript Weaver project version."""
 
-__version__ = "1.1.0004"
+__version__ = "1.1.0005"

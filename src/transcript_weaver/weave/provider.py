@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 
@@ -92,35 +94,64 @@ class Provider(Protocol):
     def transform(self, system: str, prompt: str, packet_json: str) -> str: ...
 
 
+def resolve_api_key(
+    spec: str,
+    *,
+    warning: Callable[[str], None] | None = None,
+) -> str:
+    """Resolve an API-key specification without exposing its value in failures."""
+    source, separator, remainder = spec.partition("(")
+    argument = remainder[:-1] if separator == "(" and spec.endswith(")") else ""
+    if source not in {"env", "file", "command", "literal"} or not argument.strip():
+        raise ProviderError("The configured API-key specification is invalid.")
+    try:
+        if source == "env":
+            value = os.environ.get(argument, "")
+        elif source == "file":
+            value = Path(argument).expanduser().read_text(encoding="utf-8")
+        elif source == "command":
+            result = subprocess.run(
+                argument,
+                check=True,
+                text=True,
+                capture_output=True,
+                shell=True,
+            )
+            value = result.stdout
+        else:
+            if warning is not None:
+                warning(
+                    "API key is stored directly in the TRW configuration; this is "
+                    "discouraged. Prefer env(...), file(...), or command(...)."
+                )
+            value = argument
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        raise ProviderError(
+            f"Could not resolve the configured API key from {source}(...)."
+        ) from None
+    lines = value.splitlines()
+    secret = lines[0].strip() if lines else ""
+    if not secret:
+        raise ProviderError(f"The configured API key from {source}(...) is empty.")
+    return secret
+
+
 @dataclass(slots=True)
 class GeminiProvider:
     model: str
-    credential_name: str
+    api_key_spec: str
     opener: Callable[..., Any] = urllib.request.urlopen
     sleeper: Callable[[float], None] = time.sleep
     max_attempts: int = 5
     retry_reporter: Callable[[str], None] | None = None
+    warning: Callable[[str], None] | None = None
 
     def _report_retry(self, message: str) -> None:
         if self.retry_reporter is not None:
             self.retry_reporter(message)
 
     def _secret(self) -> str:
-        try:
-            result = subprocess.run(
-                ["pass", self.credential_name],
-                check=True,
-                text=True,
-                capture_output=True,
-            )
-            secret = result.stdout.splitlines()[0].strip()
-        except (OSError, subprocess.SubprocessError, IndexError) as exc:
-            raise ProviderError(
-                "Could not retrieve the configured Gemini credential from pass."
-            ) from exc
-        if not secret:
-            raise ProviderError("The configured Gemini credential from pass is empty.")
-        return secret
+        return resolve_api_key(self.api_key_spec, warning=self.warning)
 
     def transform(self, system: str, prompt: str, packet_json: str) -> str:
         secret = self._secret()
@@ -186,23 +217,19 @@ class GeminiProvider:
 
 def build_provider(
     name: str,
-    config: dict[str, Any],
+    model: str,
+    api_key: str,
     *,
     retry_reporter: Callable[[str], None] | None = None,
+    warning: Callable[[str], None] | None = None,
 ) -> Provider:
     if name.casefold() != "gemini":
         raise ProviderError(f"Unsupported provider {name!r}.")
-    if set(config) != {"model", "credential"} or not isinstance(config.get("model"), str):
-        raise ProviderError(f"Provider {name!r} configuration is invalid.")
-    credential = config.get("credential")
-    if (
-        not isinstance(credential, dict)
-        or set(credential) != {"source", "name"}
-        or credential.get("source") != "pass"
-        or not isinstance(credential.get("name"), str)
-        or not credential["name"]
-    ):
-        raise ProviderError(
-            f"Provider {name!r} credential must specify source 'pass' and a nonempty name."
-        )
-    return GeminiProvider(config["model"], credential["name"], retry_reporter=retry_reporter)
+    if not isinstance(model, str) or not model.strip():
+        raise ProviderError(f"Provider {name!r} model is invalid.")
+    return GeminiProvider(
+        model,
+        api_key,
+        retry_reporter=retry_reporter,
+        warning=warning,
+    )

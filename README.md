@@ -94,128 +94,36 @@ When Otter exposes a reliable media duration, `trwinp` records it as
 
 ## Configuration
 
-On first use, the packaged schema-v1 configuration, Frank's journal prompt, and
+On first use, the packaged schema-v2 configuration, Frank's journal prompt, and
 David's LinkedIn structured-extraction prompt are copied atomically to the platform's
 per-user configuration directory. Existing files are never merged, migrated, repaired,
 or overwritten. Tests always inject disposable paths.
 
-Older configuration files are not automatically migrated. If you want to replace an
-early prototype configuration with the complete example, first back it up and then run
-a command so Transcript Weaver can create the new defaults:
-
-```bash
-mv ~/.config/transcript-weaver/config.json ~/.config/transcript-weaver/config.json.backup
-printf 'configuration check' | trwinp stdin > /tmp/transcript-weaver-packet.json
-```
-
-Alternatively, add the fields named by the validation error to your existing file. The
-program will never overwrite your real-vault settings.
-
-A coherent configuration looks like this:
+Schema version 2 provides global `provider`, `model`, and `api_key` defaults.
+Individual weave profiles may override any of those values independently. For
+example:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "api_key": "command(pass show api/gemini)",
   "logging": {"retained_runs": 5},
-  "providers": {
-    "gemini": {
-      "model": "gemini-3.5-flash-lite",
-      "credential": {"source": "pass", "name": "api/gemini"}
-    }
-  },
   "weave": {
-    "franks-example": {
-      "provider": "gemini",
-      "prompt_file": "prompts/example.md"
-    },
-    "davids-linkedin-example": {
-      "provider": "gemini",
-      "prompt_file": "prompts/linkedin-profile.md"
-    }
-  },
-  "out": {
-    "franks-example": {
-      "timezone": "America/Los_Angeles",
-      "vault": {
-        "path": "transcript-weaver-test-output",
-        "relative_to": "cwd"
-      },
-      "packet_fields": {
-        "category": "weave.type",
-        "content": "weave.update_transcript"
-      },
-      "destination_roots": {
-        "journals": "SubDir1/SubDir2"
-      },
-      "destinations": {
-        "gratitude": {
-          "operation": "insert",
-          "root": "journals",
-          "file": "Gratitude Journal.md",
-          "format": "## {date}\n\n{content}\n\n"
-        },
-        "dream": {
-          "operation": "insert",
-          "root": "journals",
-          "file": "Dream Journal.md",
-          "format": "## {date}\n\n{content}\n\n"
-        },
-        "ses": {
-          "operation": "insert",
-          "root": "journals",
-          "file": "SEs Journal.md",
-          "format": "## {date}\n\n{content}\n\n"
-        },
-        "sacred": {
-          "operation": "insert",
-          "root": "journals",
-          "file": "Sacred Journey.md",
-          "format": "## {date}\n\n{content}\n\n"
-        },
-        "unknown": {
-          "operation": "create",
-          "directory": "00 Inbox",
-          "filename": "unknown-{date}-{time}.md",
-          "format": "## {date}\n\n{content}\n\n"
-        }
-      }
-    }
+    "franks-example": {"prompt_file": "prompts/example.md"}
   }
 }
 ```
 
-Provider, weave, output, and destination names are matched case-insensitively.
-Names differing only by case are rejected.
+API keys can come explicitly from `env(...)`, `file(...)`, `command(...)`, or
+`literal(...)`. External secret storage is strongly preferred; `literal(...)`
+prints a warning whenever used. See the complete
+[configuration reference](docs/configuration.md), including schema-1 migration,
+inheritance, overrides, output paths, examples, and security guidance.
 
-Path objects use `path` plus `relative_to: "cwd"` or `relative_to: "config"` for
-relative paths. For an absolute path such as `/mnt/d/Notes` or a home-relative path
-such as `~/Obsidian/Notes`, omit `relative_to`. Existing path strings remain supported
-for compatibility. Keys beginning with `_comment` are embedded documentation and are
-ignored; other unexpected keys are rejected.
-
-Each output profile’s `vault` is the common root for all its destinations.
-An optional `destination_roots` object defines reusable relative paths beneath the
-resolved vault. A destination selects a root with its explicit `root` field; root
-names are matched case-insensitively, and names differing only by case are rejected.
-Unknown root names produce an error listing the available roots. Placeholder forms
-such as `{journals}` are not supported.
-
-Resolution with a selected root is:
-
-```text
-vault + destination root + destination file/directory
-```
-
-When `root` is omitted, the backward-compatible resolution is:
-
-```text
-vault + destination file/directory
-```
-
-Destination roots, files, and directories must be relative. They cannot escape the
-resolved vault with `..` or by resolving through a link to a location outside it.
-In the example, the four journals are under `vault/SubDir1/SubDir2`; the unrooted unknown
-destination remains under the vault-level `00 Inbox`.
+Run `trwinp --help`, `trweave --help`, `trwout --help`, or `trwprep --help` for
+the current command-line options.
 
 ## Weaving
 
@@ -227,11 +135,12 @@ Transcript Weaver does not currently support every provider discussed there.
 
 `trweave PROMPT_OR_PROFILE` first treats its argument as a path, resolving a
 relative path from the current working directory. A readable UTF-8 regular file
-supplies the complete prompt and uses the configured Gemini provider. Otherwise,
+supplies the complete prompt and uses the configured default provider. Otherwise,
 the argument is resolved as a weave profile. No extension guessing or file
 searching occurs.
 
-Gemini credentials are read from `pass`; secrets never belong in configuration.
+Gemini credentials are resolved from the configured API-key source. `pass` is a
+recommended `command(...)` example, but it is not required.
 The implementation uses Gemini's REST API directly, requests JSON, and retries
 transient network errors and HTTP 429/5xx responses up to four times, waiting 1,
 4, 9, and 16 seconds. Every retry is reported on standard error and is also
@@ -350,7 +259,7 @@ The live Otter functional test uses the configured WSL/Windows Chrome session:
 TRANSCRIPT_WEAVER_LIVE_OTTER=1 pytest --no-cov -m live_otter tests/test_live_otter.py
 ```
 
-That command reads `pass api/gemini` and sends only the harmless test transcript
+That command resolves the configured test API key and sends only the harmless test transcript
 to Gemini. It does not access an Obsidian vault or Otter.
 
 ## License

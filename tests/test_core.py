@@ -264,9 +264,11 @@ def test_ordinary_invocation_applies_zero_retention(app_paths: ApplicationPaths)
     app_paths.config_file.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "provider": "gemini",
+                "model": "test-model",
+                "api_key": "env(TEST_API_KEY)",
                 "logging": {"retained_runs": 0},
-                "providers": {},
                 "weave": {},
                 "out": {},
             }
@@ -305,7 +307,7 @@ def test_command_version_exits_without_normal_arguments(module, command: str, ca
         module.run(["--version"])
     assert caught.value.code == 0
     assert capsys.readouterr().out == (
-        f"{command} 1.1.0004\nSchema currently used: {SCHEMA_VERSION}\n"
+        f"{command} 1.1.0005\nSchema currently used: {SCHEMA_VERSION}\n"
     )
 
 
@@ -604,3 +606,24 @@ def test_otter_recording_navigation_resolves_relative_href() -> None:
     page = Page()
     assert client._open_newest(page) == ("Recording", "https://otter.ai/u/recording-id")
     assert page.visited == "https://otter.ai/u/recording-id"
+
+
+def test_trwinp_otter_no_recording_is_controlled_offline_failure(
+    app_paths: ApplicationPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_recording(self) -> None:
+        raise TranscriptNotFoundError("The Otter recording list contained no usable link.")
+
+    monkeypatch.setattr(OtterSource, "acquire", no_recording)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    status = cli.run(
+        ["otter"],
+        stdout=stdout,
+        stderr=stderr,
+        paths=app_paths,
+    )
+    assert status == int(ExitStatus.TRANSCRIPT_NOT_FOUND)
+    assert stdout.getvalue() == ""
+    diagnostic = stderr.getvalue()
+    assert "no usable link" in diagnostic
+    assert "Traceback" not in diagnostic

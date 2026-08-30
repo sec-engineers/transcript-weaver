@@ -14,8 +14,16 @@ from typing import Any
 
 from platformdirs import PlatformDirs
 
-CONFIG_SCHEMA_VERSION = 1
-REQUIRED_TOP_LEVEL_FIELDS = {"schema_version", "logging", "providers", "weave", "out"}
+CONFIG_SCHEMA_VERSION = 2
+REQUIRED_TOP_LEVEL_FIELDS = {
+    "schema_version",
+    "provider",
+    "model",
+    "api_key",
+    "logging",
+    "weave",
+    "out",
+}
 
 
 class ConfigurationError(RuntimeError):
@@ -30,8 +38,10 @@ class LoggingConfig:
 @dataclass(frozen=True, slots=True)
 class AppConfig:
     schema_version: int
+    provider: str
+    model: str
+    api_key: str
     logging: LoggingConfig
-    providers: dict[str, dict[str, Any]]
     weave: dict[str, dict[str, Any]]
     out: dict[str, dict[str, Any]]
 
@@ -181,17 +191,18 @@ def _validate_path(value: Any, *, context: str) -> None:
         )
 
 
-def _validate_providers(providers: dict[str, dict[str, Any]], *, path: Path) -> None:
-    for name, profile in providers.items():
-        context = f"Configuration {path} providers.{name}"
-        _require_fields(profile, required={"model", "credential"}, context=context)
-        _nonempty_string(profile["model"], context=f"{context}.model")
-        credential = _require_fields(
-            profile["credential"], required={"source", "name"}, context=f"{context}.credential"
+def _validate_api_key_spec(value: Any, *, context: str) -> str:
+    spec = _nonempty_string(value, context=context)
+    source, separator, argument = spec.partition("(")
+    if separator != "(" or not spec.endswith(")"):
+        raise ConfigurationError(
+            f"{context} must use env(...), file(...), command(...), or literal(...)."
         )
-        if credential["source"] != "pass":
-            raise ConfigurationError(f"{context}.credential.source must be 'pass'.")
-        _nonempty_string(credential["name"], context=f"{context}.credential.name")
+    if source not in {"env", "file", "command", "literal"} or not argument[:-1].strip():
+        raise ConfigurationError(
+            f"{context} must use env(...), file(...), command(...), or literal(...)."
+        )
+    return spec
 
 
 def _validate_weave(weave: dict[str, dict[str, Any]], *, path: Path) -> None:
@@ -199,11 +210,16 @@ def _validate_weave(weave: dict[str, dict[str, Any]], *, path: Path) -> None:
         context = f"Configuration {path} weave.{name}"
         _require_fields(
             profile,
-            required={"provider"},
-            optional={"prompt", "prompt_file"},
+            required=set(),
+            optional={"provider", "model", "api_key", "prompt", "prompt_file"},
             context=context,
         )
-        _nonempty_string(profile["provider"], context=f"{context}.provider")
+        if "provider" in profile:
+            _nonempty_string(profile["provider"], context=f"{context}.provider")
+        if "model" in profile:
+            _nonempty_string(profile["model"], context=f"{context}.model")
+        if "api_key" in profile:
+            _validate_api_key_spec(profile["api_key"], context=f"{context}.api_key")
         prompt_fields = {field for field in ("prompt", "prompt_file") if field in profile}
         if len(prompt_fields) != 1:
             raise ConfigurationError(
@@ -354,22 +370,22 @@ def validate_config(value: Any, *, path: Path) -> AppConfig:
             f"Configuration {path} logging.retained_runs must be a nonnegative integer; "
             f"received {retained!r}."
         )
-    providers = _profiles(root["providers"], "providers", path=path)
+    provider = _nonempty_string(root["provider"], context=f"Configuration {path} provider")
+    model = _nonempty_string(root["model"], context=f"Configuration {path} model")
+    api_key = _validate_api_key_spec(root["api_key"], context=f"Configuration {path} api_key")
     weave = _profiles(root["weave"], "weave", path=path)
     out = _profiles(root["out"], "out", path=path)
-    _validate_providers(providers, path=path)
     _validate_weave(weave, path=path)
-    provider_names = {name.casefold() for name in providers}
-    for name, profile in weave.items():
-        provider_name = profile["provider"]
-        if provider_name.casefold() not in provider_names:
-            available = ", ".join(sorted(providers)) or "none configured"
-            raise ConfigurationError(
-                f"Configuration {path} weave.{name}.provider names unknown provider "
-                f"{provider_name!r}. Available providers: {available}."
-            )
     _validate_out(out, path=path)
-    return AppConfig(CONFIG_SCHEMA_VERSION, LoggingConfig(retained), providers, weave, out)
+    return AppConfig(
+        CONFIG_SCHEMA_VERSION,
+        provider,
+        model,
+        api_key,
+        LoggingConfig(retained),
+        weave,
+        out,
+    )
 
 
 def load_or_create_config(paths: ApplicationPaths) -> AppConfig:

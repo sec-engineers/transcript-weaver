@@ -33,9 +33,11 @@ def test_first_run_creates_owned_config_atomically(app_paths: ApplicationPaths) 
 def test_existing_config_is_never_overwritten(app_paths: ApplicationPaths) -> None:
     app_paths.config_file.parent.mkdir(parents=True)
     custom = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "provider": "gemini",
+        "model": "custom",
+        "api_key": "env(TEST_KEY)",
         "logging": {"retained_runs": 1000},
-        "providers": {},
         "weave": {},
         "out": {},
     }
@@ -57,12 +59,12 @@ def test_concurrent_first_run_is_complete(app_paths: ApplicationPaths) -> None:
     [
         [],
         {},
-        {"schema_version": 2, "logging": {"retained_runs": 5}},
-        {"schema_version": 1, "logging": []},
-        {"schema_version": 1, "logging": {"retained_runs": -1}},
-        {"schema_version": 1, "logging": {"retained_runs": True}},
-        {"schema_version": 1, "logging": {"retained_runs": 5, "extra": 1}},
-        {"schema_version": 1, "logging": {"retained_runs": 5}, "extra": 1},
+        {"schema_version": 1, "logging": {"retained_runs": 5}},
+        {"schema_version": 2, "logging": []},
+        {"schema_version": 2, "logging": {"retained_runs": -1}},
+        {"schema_version": 2, "logging": {"retained_runs": True}},
+        {"schema_version": 2, "logging": {"retained_runs": 5, "extra": 1}},
+        {"schema_version": 2, "logging": {"retained_runs": 5}, "extra": 1},
     ],
 )
 def test_invalid_config_values_are_rejected(value: object, tmp_path: Path) -> None:
@@ -162,7 +164,9 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     assert vault == {"path": "transcript-weaver-test-output", "relative_to": "cwd"}
     stored = json.loads(app_paths.config_file.read_text())
     assert stored["out"]["franks-example"]["vault"]["_comment"]
-    assert config.providers["gemini"]["model"] == "gemini-3.5-flash-lite"
+    assert config.provider == "gemini"
+    assert config.model == "gemini-3.5-flash-lite"
+    assert config.api_key == "command(pass show api/gemini)"
     assert set(config.weave) == {"franks-example", "davids-linkedin-example"}
     assert set(config.out) == {"franks-example"}
     raw_config = app_paths.config_file.read_text()
@@ -214,7 +218,7 @@ def test_top_level_configuration_error_lists_missing_and_unrecognized_fields(
 ) -> None:
     path = tmp_path / "config.json"
     value = {
-        "schema_version": 1,
+        "schema_version": 2,
         "logging": {"retained_runs": 5},
         "obsolete": {},
     }
@@ -222,18 +226,17 @@ def test_top_level_configuration_error_lists_missing_and_unrecognized_fields(
         validate_config(value, path=path)
     message = str(caught.value)
     assert str(path) in message
-    assert "missing required fields: out, providers, weave" in message
+    assert "missing required fields: api_key, model, out, provider, weave" in message
     assert "unrecognized fields: obsolete" in message
-    assert "Expected fields: logging, out, providers, schema_version, weave" in message
+    assert (
+        "Expected fields: api_key, logging, model, out, provider, schema_version, weave" in message
+    )
 
 
 @pytest.mark.parametrize(
     ("mutate", "expected"),
     [
-        (
-            lambda value: value["providers"]["gemini"].update({"unexpected": True}),
-            "providers.gemini has unrecognized fields: unexpected",
-        ),
+        (lambda value: value.update({"api_key": "unknown(secret)"}), "api_key must use"),
         (
             lambda value: value["weave"]["franks-example"].pop("prompt_file"),
             "weave.franks-example must contain exactly one of prompt or prompt_file",
@@ -294,8 +297,30 @@ def test_existing_default_config_recreates_only_missing_referenced_prompt(
     assert prompt_path.read_text() == "custom"
 
 
-def test_weave_profile_rejects_unknown_provider(tmp_path: Path) -> None:
+def test_weave_profile_accepts_provider_model_and_api_key_overrides(tmp_path: Path) -> None:
     value = json.loads(packaged_default_config_bytes())
-    value["weave"]["franks-example"]["provider"] = "missing-provider"
-    with pytest.raises(ConfigurationError, match="Available providers: gemini"):
-        validate_config(value, path=tmp_path / "config.json")
+    profile = value["weave"]["franks-example"]
+    profile.update(
+        {
+            "provider": "future-provider",
+            "model": "future-model",
+            "api_key": "env(FUTURE_API_KEY)",
+        }
+    )
+    config = validate_config(value, path=tmp_path / "config.json")
+    assert config.weave["franks-example"]["provider"] == "future-provider"
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "env(GEMINI_API_KEY)",
+        "file(~/.config/trw/gemini.key)",
+        "command(pass show ai/gemini)",
+        "literal(example-key)",
+    ],
+)
+def test_api_key_sources_are_accepted(spec: str, tmp_path: Path) -> None:
+    value = json.loads(packaged_default_config_bytes())
+    value["api_key"] = spec
+    assert validate_config(value, path=tmp_path / "config.json").api_key == spec

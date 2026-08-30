@@ -1,5 +1,7 @@
 import io
 import json
+import subprocess
+import traceback
 import urllib.error
 from pathlib import Path
 from typing import Any
@@ -28,7 +30,12 @@ from transcript_weaver.weave.core import (
     resolve_prompt,
     validate_response,
 )
-from transcript_weaver.weave.provider import GeminiProvider, ProviderError, build_provider
+from transcript_weaver.weave.provider import (
+    GeminiProvider,
+    ProviderError,
+    build_provider,
+    resolve_api_key,
+)
 
 RUN = "20260805-120000-a1b2"
 
@@ -64,15 +71,12 @@ def base_config(vault: str = "vault") -> dict[str, Any]:
         "format": "{content}\n",
     }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "api_key": "command(pass show api/gemini)",
         "logging": {"retained_runs": 5},
-        "providers": {
-            "Gemini": {
-                "model": "gemini-3.5-flash-lite",
-                "credential": {"source": "pass", "name": "api/gemini"},
-            }
-        },
-        "weave": {"Cleanup": {"provider": "gemini", "prompt": "Clean safely"}},
+        "weave": {"Cleanup": {"prompt": "Clean safely"}},
         "out": {
             "Journals": {
                 "timezone": "America/Los_Angeles",
@@ -170,6 +174,35 @@ def test_prompt_resolution_variants(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     invalid.write_bytes(b"\xff")
     with pytest.raises(WeaveError, match="UTF-8"):
         resolve_prompt(str(invalid), config, paths)
+
+
+def test_provider_model_and_api_key_inherit_and_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = base_config()
+    value["weave"]["Override"] = {
+        "provider": "gemini",
+        "model": "override-model",
+        "api_key": "env(OVERRIDE_KEY)",
+        "prompt": "Override safely",
+    }
+    paths = paths_with_config(tmp_path, value)
+    config = load_or_create_config(paths)
+    seen: list[tuple[str, str, str]] = []
+
+    def fake_build(name, model, api_key, **kwargs):
+        seen.append((name, model, api_key))
+        return FakeProvider()
+
+    monkeypatch.setattr("transcript_weaver.weave.core.build_provider", fake_build)
+    from transcript_weaver.weave.core import transform
+
+    transform(packet(), "Cleanup", config, paths)
+    transform(packet(), "Override", config, paths)
+    assert seen == [
+        ("gemini", "gemini-3.5-flash-lite", "command(pass show api/gemini)"),
+        ("gemini", "override-model", "env(OVERRIDE_KEY)"),
+    ]
 
 
 def test_configured_prompt_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -525,10 +558,8 @@ def quota_error(*, code: int = 429) -> urllib.error.HTTPError:
 
 def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ProviderError):
-        build_provider("other", {})
-    provider = build_provider(
-        "gemini", {"model": "m", "credential": {"source": "pass", "name": "n"}}
-    )
+        build_provider("other", "m", "env(KEY)")
+    provider = build_provider("gemini", "m", "env(KEY)")
     assert provider.model == "m"
     monkeypatch.setattr(GeminiProvider, "_secret", lambda self: "SECRET")
 
@@ -575,6 +606,67 @@ def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> 
     assert "retry 4 of 4 in 16 seconds" in retries[-1]
 
 
+def test_api_key_sources_resolve_without_leaking_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    secret = "DO-NOT-PRINT-THIS"
+    monkeypatch.setenv("TRW_TEST_API_KEY", secret)
+    assert resolve_api_key("env(TRW_TEST_API_KEY)") == secret
+
+    key_file = tmp_path / "key"
+    key_file.write_text(secret + "\n")
+    assert resolve_api_key(f"file({key_file})") == secret
+
+    def fake_run(*args, **kwargs):
+        return __import__("subprocess").CompletedProcess(args[0], 0, secret + "\n", "")
+
+    monkeypatch.setattr("transcript_weaver.weave.provider.subprocess.run", fake_run)
+    assert resolve_api_key("command(secret-tool get key)") == secret
+
+    warnings: list[str] = []
+    assert resolve_api_key(f"literal({secret})", warning=warnings.append) == secret
+    assert warnings and secret not in warnings[0]
+    assert "discouraged" in warnings[0]
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "env(MISSING_TRW_TEST_API_KEY)",
+        "file(/path/that/does/not/exist)",
+        "literal()",
+        "literal(DO-NOT-PRINT-THIS",
+    ],
+)
+def test_api_key_resolution_errors_do_not_echo_spec_or_secret(spec: str) -> None:
+    with pytest.raises(ProviderError) as caught:
+        resolve_api_key(spec)
+    message = str(caught.value)
+    assert spec not in message
+    assert "DO-NOT-PRINT-THIS" not in message
+
+
+def test_command_failure_traceback_suppresses_command_and_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "DO-NOT-PRINT-THIS"
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            f"secret-tool {secret}",
+            output=secret,
+            stderr=secret,
+        )
+
+    monkeypatch.setattr("transcript_weaver.weave.provider.subprocess.run", fail)
+    with pytest.raises(ProviderError) as caught:
+        resolve_api_key(f"command(secret-tool {secret})")
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert secret not in rendered
+    assert "CalledProcessError" not in rendered
+
+
 def test_retry_warning_reaches_stderr_and_enabled_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -591,8 +683,9 @@ def test_retry_warning_reaches_stderr_and_enabled_log(
             self.reporter("Gemini HTTP 429; retry 1 of 4 in 1 seconds")
             return super().transform(system, prompt, packet_json)
 
-    def fake_build(name, config, *, retry_reporter=None):
+    def fake_build(name, model, api_key, *, retry_reporter=None, warning=None):
         assert retry_reporter is not None
+        assert warning is retry_reporter
         return ReportingProvider(retry_reporter)
 
     monkeypatch.setattr("transcript_weaver.weave.core.build_provider", fake_build)

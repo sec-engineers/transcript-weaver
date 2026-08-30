@@ -1,16 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "api_key": "command(pass show api/gemini)",
   "logging": {
     "retained_runs": 5
-  },
-  "providers": {
-    "gemini": {
-      "model": "gemini-3.5-flash-lite",
-      "credential": {
-        "source": "pass",
-        "name": "api/gemini"
-      }
-    }
   },
   "_comment_profiles": [
     "Copy and rename these weave and output profiles to create your",
@@ -23,7 +17,6 @@
         "inline prompt or prompt file. This example uses",
         "prompts/example.md."
       ],
-      "provider": "gemini",
       "prompt_file": "prompts/example.md"
     },
     "davids-linkedin-example": {
@@ -32,7 +25,6 @@
         "extract profile facts from a captured LinkedIn DOM.",
         "Its output is placed beneath weave.linkedin."
       ],
-      "provider": "gemini",
       "prompt_file": "prompts/linkedin-profile.md"
     }
   },
