@@ -8,7 +8,8 @@
   },
   "_comment_profiles": [
     "Copy and rename these weave and output profiles to create your",
-    "own provider, prompt, routing, and destination configuration."
+    "own provider, prompt, routing, destination, and CRM mapping",
+    "configuration."
   ],
   "weave": {
     "franks-example": {
@@ -29,6 +30,59 @@
     }
   },
   "out": {
+    "davids-highlevel-example": {
+      "_comment": [
+        "The optional HighLevel plugin maps extracted LinkedIn facts",
+        "to a contact. Install transcript-weaver-highlevel before",
+        "using this profile.",
+        "Custom fields must already exist in the HighLevel location.",
+        "Every possible incoming field is mapped or ignored.",
+        "Different nonempty values stop for review by default."
+      ],
+      "driver": "highlevel",
+      "location_id": "command(pass show highlevel/ddr_locationid)",
+      "token": "command(pass show highlevel/ddr_pit)",
+      "source_path": "weave.linkedin",
+      "identity": [
+        "linkedin_url",
+        "email",
+        "phone"
+      ],
+      "on_conflict": "review",
+      "fields": {
+        "full_name": {
+          "target": "name"
+        },
+        "first_name": {
+          "target": "firstName"
+        },
+        "last_name": {
+          "target": "lastName"
+        },
+        "headline": {
+          "ignore": true
+        },
+        "about": {
+          "target": {
+            "custom_field": "contact.about_contact"
+          }
+        },
+        "location": {
+          "ignore": true
+        },
+        "email": {
+          "target": "email"
+        },
+        "phone": {
+          "target": "phone"
+        },
+        "linkedin_url": {
+          "target": {
+            "custom_field": "contact.linkedin"
+          }
+        }
+      }
+    },
     "franks-example": {
       "_comment": [
         "This output profile routes Frank's transformed transcripts",

@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.0007 - 2026-10-21
+
+- Added a versioned output-plugin boundary and an official, separately
+  installable HighLevel plugin built from the same repository and project
+  version as core TRW.
+- Added a conservative HighLevel contact mapping example: every incoming
+  field must be mapped or ignored, ambiguous identities and changed
+  nonempty values stop before writes, missing input never clears a contact,
+  and per-field preserve or replace policies are explicit.
+- Added offline HighLevel mapping, identity, conflict, discovery, and
+  packaging tests plus an opt-in live contact-lifecycle test using runtime
+  credentials and ownership-checked cleanup.
+- Added Windows and macOS offline CI coverage while retaining Linux
+  coverage for every supported Python version.
+- Added a 30-second current-DOM capture timeout so an unresponsive page
+  produces a clean, retryable error instead of waiting indefinitely.
+- Added optional phone extraction to the packaged LinkedIn profile prompt.
+- Made missing HighLevel custom-field errors list the available contact field
+  names, keys, and IDs so configuration spelling can be corrected directly.
+- Matched David's sample output profile to his existing HighLevel About Contact
+  and LinkedIn URL fields while explicitly ignoring unsupported headline and
+  displayed-location values.
+- Made HighLevel review conflicts show the existing and incoming values
+  together so whitespace, spelling, and punctuation differences are visible.
+- Rejected duplicate HighLevel destination mappings, including different
+  references which resolve to the same custom field, before contact writes.
+- Made Gemini per-minute quota failures use a fixed one-minute retry delay and
+  report that wait in minutes while retaining normal transient backoff.
+
 ## 1.1.0006 - 2026-08-29
 
 - Added `trwprep validate-config` to validate schema-2 configurations and offer

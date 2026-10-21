@@ -18,6 +18,15 @@ For local development from a repository checkout:
 python3 -m pip install --editable .
 ```
 
+Optional integrations are installed only when needed. For HighLevel output:
+
+```bash
+python3 -m pip install --user transcript-weaver-highlevel
+```
+
+Core TRW gives this exact command if a HighLevel output profile is selected
+without its plugin.
+
 DOM and Otter acquisition currently support WSL on Windows and control dedicated
 Windows Chrome profiles through Chrome DevTools integration. Browser automation is intentional:
 Otter currently reserves its supported public API for Enterprise workspaces. The
@@ -186,6 +195,14 @@ supported. Create-operation filenames allow only `{date}` and `{time}`.
 - `append` atomically appends the configured rendered text.
 - `create` creates a standalone file atomically and refuses to overwrite one.
 
+An output profile may instead select an installed output driver. The official
+HighLevel plugin maps structured packet fields to CRM contacts while requiring
+every incoming field to be mapped or explicitly ignored. Its default policy
+stops before changing different nonempty values, never clears fields for
+missing input, and never identifies a contact by name alone. See
+[HighLevel output](docs/highlevel.md) for installation, configuration,
+identity, conflict, and live-test details.
+
 The example stores `Dream Journal.md`, `Gratitude Journal.md`, `SEs Journal.md`,
 and `Sacred Journey.md` beneath the configured vault-relative journal root. Unknown
 material is routed to the vault-relative `00 Inbox` directory as
@@ -246,15 +263,16 @@ removed manually after confirming no build is active.
 ## Development and tests
 
 ```bash
-pytest -m 'not live_otter and not live_gemini'
+pytest -m 'not live_otter and not live_gemini and not live_highlevel'
 ruff check .
 ruff format --check .
 mypy
 python -m transcript_weaver.build
 ```
 
-The default suite is offline and uses fake providers and miniature temporary
-vaults. Live Otter and Gemini checks are opt-in. After all offline checks pass:
+The default suite is offline and uses fake providers, a fake HighLevel API,
+and miniature temporary vaults. Live Otter, Gemini, and HighLevel checks are
+opt-in. After all offline checks pass:
 
 ```bash
 TRANSCRIPT_WEAVER_LIVE_GEMINI=1 pytest --no-cov -m live_gemini tests/test_live_gemini.py

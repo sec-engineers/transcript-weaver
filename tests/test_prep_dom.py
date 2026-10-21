@@ -18,8 +18,17 @@ class FakePage:
         self.url = "https://www.linkedin.com/in/example"
         self._html = html
 
-    def content(self) -> str:
-        return self._html
+    def locator(self, selector: str) -> object:
+        assert selector == "html"
+        page = self
+
+        class Locator:
+            def evaluate(self, expression: str, *, timeout: int) -> str:
+                assert "documentElement.outerHTML" in expression
+                assert timeout == dom.DOM_CAPTURE_TIMEOUT_MS
+                return page._html
+
+        return Locator()
 
     def title(self) -> str:
         return "Example Person | LinkedIn"
@@ -101,6 +110,28 @@ def test_dom_source_rejects_empty_dom(monkeypatch: pytest.MonkeyPatch) -> None:
         dom.DomSource(
             endpoint="http://example:9225", playwright_api=playwright_api([context])
         ).acquire()
+
+
+def test_dom_source_times_out_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
+    class CaptureTimeout(Exception):
+        pass
+
+    class SlowPage(FakePage):
+        def locator(self, selector: str) -> object:
+            assert selector == "html"
+
+            class Locator:
+                def evaluate(self, expression: str, *, timeout: int) -> str:
+                    raise CaptureTimeout
+
+            return Locator()
+
+    api = playwright_api([SimpleNamespace(pages=[SlowPage()])])
+    api.TimeoutError = CaptureTimeout
+    monkeypatch.setattr(dom, "cdp_ready", lambda endpoint: True)
+
+    with pytest.raises(SourceUnavailableError, match="did not respond within 30 seconds"):
+        dom.DomSource(endpoint="http://example:9225", playwright_api=api).acquire()
 
 
 def test_dom_prep_starts_once_and_reuses_running_browser(
@@ -207,7 +238,7 @@ def test_trwprep_cli_help_version_and_error(monkeypatch: pytest.MonkeyPatch, cap
     with pytest.raises(SystemExit) as caught:
         prep_cli.run(["--version"])
     assert caught.value.code == 0
-    assert "trwprep 1.1.0006" in capsys.readouterr().out
+    assert "trwprep 1.1.0007" in capsys.readouterr().out
 
     def fail(*args: object, **kwargs: object) -> None:
         raise SourceUnavailableError("not ready")

@@ -606,6 +606,73 @@ def test_provider_configuration_and_retries(monkeypatch: pytest.MonkeyPatch) -> 
     assert "retry 4 of 4 in 16 seconds" in retries[-1]
 
 
+def test_per_minute_quota_uses_fixed_one_minute_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(GeminiProvider, "_secret", lambda self: "SECRET")
+    body = {
+        "error": {
+            "code": 429,
+            "message": "Requests per minute exceeded.",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "violations": [
+                        {
+                            "quotaMetric": "generate_content_requests",
+                            "quotaId": "GenerateRequestsPerMinutePerProjectPerModel",
+                        }
+                    ]
+                }
+            ],
+        }
+    }
+
+    class Response:
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        @staticmethod
+        def read() -> bytes:
+            value = {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+            return json.dumps(value).encode()
+
+    calls = 0
+
+    def opener(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise urllib.error.HTTPError(
+                "https://redacted",
+                429,
+                "limited",
+                {},
+                io.BytesIO(json.dumps(body).encode()),
+            )
+        return Response()
+
+    delays: list[float] = []
+    retries: list[str] = []
+    provider = GeminiProvider(
+        "m",
+        "n",
+        opener=opener,
+        sleeper=delays.append,
+        retry_reporter=retries.append,
+    )
+
+    assert provider.transform("s", "p", "{}") == "{}"
+    assert delays == [60.0]
+    assert len(retries) == 1
+    assert "per-minute request limit exceeded" in retries[0]
+    assert "retry 1 of 4 in 1 minute" in retries[0]
+    assert "60 seconds" not in retries[0]
+
+
 def test_api_key_sources_resolve_without_leaking_secrets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -620,7 +687,7 @@ def test_api_key_sources_resolve_without_leaking_secrets(
     def fake_run(*args, **kwargs):
         return __import__("subprocess").CompletedProcess(args[0], 0, secret + "\n", "")
 
-    monkeypatch.setattr("transcript_weaver.weave.provider.subprocess.run", fake_run)
+    monkeypatch.setattr("transcript_weaver.credentials.subprocess.run", fake_run)
     assert resolve_api_key("command(secret-tool get key)") == secret
 
     warnings: list[str] = []
@@ -659,7 +726,7 @@ def test_command_failure_traceback_suppresses_command_and_output(
             stderr=secret,
         )
 
-    monkeypatch.setattr("transcript_weaver.weave.provider.subprocess.run", fail)
+    monkeypatch.setattr("transcript_weaver.credentials.subprocess.run", fail)
     with pytest.raises(ProviderError) as caught:
         resolve_api_key(f"command(secret-tool {secret})")
     rendered = "".join(traceback.format_exception(caught.value))

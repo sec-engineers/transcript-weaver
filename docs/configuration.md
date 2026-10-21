@@ -139,3 +139,9 @@ Destinations cannot escape the resolved vault with `..` or symbolic links.
 
 Keys beginning with `_comment` are embedded documentation and are ignored.
 Other unexpected keys are rejected.
+
+Output profiles with a `driver` are validated by their installed output
+plugin when selected. This allows a configuration to describe optional
+integrations without requiring every user to install every integration.
+The official HighLevel profile, field mapping, identity rules, and conflict
+behavior are documented in [highlevel.md](highlevel.md).

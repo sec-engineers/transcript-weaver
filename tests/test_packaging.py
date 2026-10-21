@@ -30,3 +30,13 @@ def test_project_version_has_one_dynamic_source_and_packet_format() -> None:
     assert "/.transcript-weaver-build.lock" in data["tool"]["hatch"]["build"]["exclude"]
     assert re.fullmatch(r"\d+\.\d+\.\d{4}", __version__)
     assert (project_root / "src/transcript_weaver/_version.py").read_text().count(__version__) == 1
+
+    plugin_path = project_root / "plugins" / "highlevel" / "pyproject.toml"
+    with plugin_path.open("rb") as stream:
+        plugin = tomllib.load(stream)
+    assert plugin["project"]["dynamic"] == ["version"]
+    assert plugin["tool"]["hatch"]["version"]["path"] == ("../../src/transcript_weaver/_version.py")
+    assert (
+        plugin["project"]["entry-points"]["transcript_weaver.output_drivers"]["highlevel"]
+        == "transcript_weaver_highlevel:driver"
+    )

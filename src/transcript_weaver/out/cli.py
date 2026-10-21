@@ -20,7 +20,8 @@ from transcript_weaver.config import (
     get_application_paths,
     load_or_create_config,
 )
-from transcript_weaver.out.core import OutputError, persist
+from transcript_weaver.out.core import OutputError
+from transcript_weaver.out.plugins import dispatch_output
 from transcript_weaver.profiles import available_profiles
 from transcript_weaver.runtime import RunIdError, ensure_packet_run_id
 
@@ -83,12 +84,12 @@ def run(
             paths=effective_paths,
             config=config,
         )
-        operation, target = persist(
+        result = dispatch_output(
             packet, args.output_profile, config, effective_paths, warn=invocation.warning
         )
         invocation.log.info(
-            f"Output completed profile={args.output_profile!r} operation={operation} "
-            f"destination={target.name!r}"
+            f"Output completed profile={args.output_profile!r} "
+            f"operation={result.operation} destination={result.destination!r}"
         )
         invocation.close(success=True)
         return 0

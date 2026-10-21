@@ -184,7 +184,15 @@ def test_first_run_provisions_example_prompt_and_sanitizes_comments(
     assert config.model == "gemini-3.5-flash-lite"
     assert config.api_key == "command(pass show api/gemini)"
     assert set(config.weave) == {"franks-example", "davids-linkedin-example"}
-    assert set(config.out) == {"franks-example"}
+    assert set(config.out) == {"franks-example", "davids-highlevel-example"}
+    highlevel = config.out["davids-highlevel-example"]
+    assert highlevel["driver"] == "highlevel"
+    assert highlevel["source_path"] == "weave.linkedin"
+    assert highlevel["identity"] == ["linkedin_url", "email", "phone"]
+    assert highlevel["fields"]["headline"] == {"ignore": True}
+    assert highlevel["fields"]["about"] == {"target": {"custom_field": "contact.about_contact"}}
+    assert highlevel["fields"]["location"] == {"ignore": True}
+    assert highlevel["fields"]["linkedin_url"] == {"target": {"custom_field": "contact.linkedin"}}
     raw_config = app_paths.config_file.read_text()
     assert max(map(len, raw_config.splitlines())) <= 75
     assert raw_config.index('"_comment_profiles"') < raw_config.index('"weave"')

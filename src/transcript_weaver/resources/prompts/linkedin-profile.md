@@ -14,6 +14,7 @@ Return exactly this transformation result:
       "about": "About section",
       "location": "displayed location",
       "email": "displayed email address",
+      "phone": "displayed phone number",
       "linkedin_url": "canonical LinkedIn profile URL"
     }
   }

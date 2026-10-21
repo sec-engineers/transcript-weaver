@@ -33,7 +33,7 @@ def _read_version(path: Path) -> str:
 
 
 def run_release_build(project_root: Path, *, command: Sequence[str] | None = None) -> str:
-    """Build distributions without changing the version recorded in source."""
+    """Build coordinated distributions without changing the recorded version."""
     root = project_root.resolve()
     version_path = root / "src" / "transcript_weaver" / "_version.py"
     lock_path = root / LOCK_NAME
@@ -50,12 +50,34 @@ def run_release_build(project_root: Path, *, command: Sequence[str] | None = Non
 
     try:
         version = _read_version(version_path)
-        build_command = list(command or (sys.executable, "-m", "build"))
-        result = subprocess.run(build_command, cwd=root, check=False)
-        if result.returncode != 0:
-            raise BuildVersionError(
-                f"Distribution build failed with exit status {result.returncode}."
-            )
+        if command is not None:
+            builds = [(root, list(command))]
+        else:
+            projects = [root, *sorted((root / "plugins").glob("*/pyproject.toml"))]
+            project_roots = [
+                item.parent if item.name == "pyproject.toml" else item for item in projects
+            ]
+            builds = [
+                (
+                    project,
+                    [
+                        sys.executable,
+                        "-m",
+                        "build",
+                        "--outdir",
+                        str(root / "dist"),
+                        str(project),
+                    ],
+                )
+                for project in project_roots
+            ]
+        for project, build_command in builds:
+            result = subprocess.run(build_command, cwd=root, check=False)
+            if result.returncode != 0:
+                label = project.relative_to(root) if project != root else Path(".")
+                raise BuildVersionError(
+                    f"Distribution build for {label} failed with exit status {result.returncode}."
+                )
         return version
     finally:
         with suppress(FileNotFoundError):

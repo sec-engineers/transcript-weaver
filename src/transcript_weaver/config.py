@@ -319,6 +319,9 @@ def _validate_destinations(value: Any, *, context: str, destination_roots: dict[
 def _validate_out(out: dict[str, dict[str, Any]], *, path: Path) -> None:
     for name, profile in out.items():
         context = f"Configuration {path} out.{name}"
+        if "driver" in profile:
+            _nonempty_string(profile["driver"], context=f"{context}.driver")
+            continue
         fields = _require_fields(
             profile,
             required={"timezone", "vault", "packet_fields", "destinations"},

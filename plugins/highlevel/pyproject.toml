@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "transcript-weaver-highlevel"
+dynamic = ["version"]
+description = "Official HighLevel output plugin for Transcript Weaver"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Transcript Weaver contributors" }]
+dependencies = ["transcript-weaver>=1.1,<1.2"]
+
+[project.entry-points."transcript_weaver.output_drivers"]
+highlevel = "transcript_weaver_highlevel:driver"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transcript_weaver_highlevel"]
+
+[tool.hatch.version]
+path = "../../src/transcript_weaver/_version.py"
+

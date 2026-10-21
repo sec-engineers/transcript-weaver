@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol
+
+from transcript_weaver.credentials import CredentialError, resolve_credential
 
 
 class ProviderError(RuntimeError):
@@ -34,6 +33,16 @@ def _quota_label(quota_id: str, metric: str) -> str:
     period = "daily" if "perday" in folded else "per-minute" if "perminute" in folded else ""
     resource = "input-token" if "token" in folded else "request" if "request" in folded else "quota"
     return " ".join(part for part in (period, resource, "limit exceeded") if part)
+
+
+def _is_minute_limit(reason: str | None) -> bool:
+    if reason is None:
+        return False
+    folded = reason.casefold()
+    explicit = ("per-minute", "per minute", "perminute", "requests/minute", "tokens/minute")
+    return any(marker in folded for marker in explicit) or (
+        "minute" in folded and any(marker in folded for marker in ("limit", "quota", "rate"))
+    )
 
 
 def _http_error_reason(exc: urllib.error.HTTPError, *, secret: str) -> str | None:
@@ -100,40 +109,10 @@ def resolve_api_key(
     warning: Callable[[str], None] | None = None,
 ) -> str:
     """Resolve an API-key specification without exposing its value in failures."""
-    source, separator, remainder = spec.partition("(")
-    argument = remainder[:-1] if separator == "(" and spec.endswith(")") else ""
-    if source not in {"env", "file", "command", "literal"} or not argument.strip():
-        raise ProviderError("The configured API-key specification is invalid.")
     try:
-        if source == "env":
-            value = os.environ.get(argument, "")
-        elif source == "file":
-            value = Path(argument).expanduser().read_text(encoding="utf-8")
-        elif source == "command":
-            result = subprocess.run(
-                argument,
-                check=True,
-                text=True,
-                capture_output=True,
-                shell=True,
-            )
-            value = result.stdout
-        else:
-            if warning is not None:
-                warning(
-                    "API key is stored directly in the TRW configuration; this is "
-                    "discouraged. Prefer env(...), file(...), or command(...)."
-                )
-            value = argument
-    except (OSError, UnicodeError, subprocess.SubprocessError):
-        raise ProviderError(
-            f"Could not resolve the configured API key from {source}(...)."
-        ) from None
-    lines = value.splitlines()
-    secret = lines[0].strip() if lines else ""
-    if not secret:
-        raise ProviderError(f"The configured API key from {source}(...) is empty.")
-    return secret
+        return resolve_credential(spec, label="API key", warning=warning)
+    except CredentialError as exc:
+        raise ProviderError(str(exc)) from None
 
 
 @dataclass(slots=True)
@@ -178,10 +157,12 @@ class GeminiProvider:
                 reason = _http_error_reason(exc, secret=secret)
                 why = f": {reason}" if reason else ""
                 if transient and attempt < self.max_attempts:
-                    delay = float(attempt * attempt)
+                    minute_limit = _is_minute_limit(reason)
+                    delay = 60.0 if minute_limit else float(attempt * attempt)
+                    delay_label = "1 minute" if minute_limit else f"{delay:g} seconds"
                     self._report_retry(
                         f"Gemini HTTP {exc.code}{why}; retry {attempt} of "
-                        f"{self.max_attempts - 1} in {delay:g} seconds"
+                        f"{self.max_attempts - 1} in {delay_label}"
                     )
                     self.sleeper(delay)
                     continue

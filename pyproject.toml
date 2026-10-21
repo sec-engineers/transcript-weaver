@@ -56,10 +56,11 @@ path = "src/transcript_weaver/_version.py"
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --cov=transcript_weaver --cov-report=term-missing"
-testpaths = ["tests"]
+testpaths = ["tests", "plugins/highlevel/tests"]
 markers = [
   "live_otter: opt-in test that accesses the live Otter service and Chrome",
   "live_gemini: opt-in test that accesses the live Gemini service",
+  "live_highlevel: opt-in test that creates and deletes marked HighLevel contacts",
 ]
 
 [tool.coverage.run]
@@ -80,4 +81,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-packages = ["transcript_weaver"]
+files = ["src", "plugins/highlevel/src"]
