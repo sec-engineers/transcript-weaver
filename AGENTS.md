@@ -61,6 +61,27 @@ live verification or the change specifically requires it.
 
 Add or update focused automated tests for changed behavior.
 
+## Actionable errors
+
+Make errors useful to people who do not understand TRW's internals.
+When practical, include the failing value or operation, the relevant
+available choices or discovered values, and the exact corrective action
+or diagnostic command. Examples include listing configured profiles and
+available HighLevel field names. Do not expose credentials, transcripts,
+private browser content, or other sensitive values while providing
+diagnostic context.
+
+## Portability and contributors
+
+Keep platform-specific behavior behind small, explicit boundaries. When
+adding support for another operating system, distribution, browser, or
+external environment, consider both TRW maintainers and outside
+contributors who may be the only people able to test that environment.
+Make platform assumptions, setup requirements, test procedures, and
+unsupported cases discoverable. Favor focused modules and tests that
+contributors can change and verify without needing unrelated TRW
+internals.
+
 ## Project conventions
 
 Use existing version and schema constants rather than introducing duplicate

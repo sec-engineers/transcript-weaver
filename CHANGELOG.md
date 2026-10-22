@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0008 - 2026-10-21
+
+- Added the GPL license file and project links to the separately
+  distributed HighLevel plugin package.
+- Added a repeatable release checklist covering coordinated core and
+  plugin validation, publication, and post-publication verification.
+- Corrected the pipeline contract documentation to state that
+  distribution builds use the recorded version without modifying it.
+- Added repository guidance for actionable, privacy-safe errors and
+  contributor-friendly platform boundaries and tests.
+
 ## 1.1.0007 - 2026-10-21
 
 - Added a versioned output-plugin boundary and an official, separately

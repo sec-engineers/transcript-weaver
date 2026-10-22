@@ -9,8 +9,15 @@ description = "Official HighLevel output plugin for Transcript Weaver"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Transcript Weaver contributors" }]
 dependencies = ["transcript-weaver>=1.1,<1.2"]
+
+[project.urls]
+Homepage = "https://github.com/sec-engineers/transcript-weaver"
+Repository = "https://github.com/sec-engineers/transcript-weaver"
+Issues = "https://github.com/sec-engineers/transcript-weaver/issues"
+Documentation = "https://github.com/sec-engineers/transcript-weaver/tree/main/docs/highlevel.md"
 
 [project.entry-points."transcript_weaver.output_drivers"]
 highlevel = "transcript_weaver_highlevel:driver"

@@ -65,7 +65,11 @@ may contain the complete input packet. Successful provider responses are not ret
 ## Distribution build
 
 `src/transcript_weaver/_version.py` is authoritative. Run
-`python -m transcript_weaver.build` for an intentional distribution build. It locks
-against concurrency, increments the four-digit build exactly once, builds the wheel and
-source distribution with that version, and restores the prior version on failure.
-Metadata inspection, imports, tests, and installation do not increment it. Python package metadata canonicalizes `1.0.0001` to its PEP 440-equivalent `1.0.1`, while the packaged source and pipeline packets retain the four-digit application build.
+`python -m transcript_weaver.build` for an intentional coordinated
+distribution build. It locks against concurrency and builds the core and
+plugin wheels and source distributions using the version already recorded in
+source. It never changes the version. Release-relevant source changes
+increment the four-digit build once before building; repeated builds, metadata
+inspection, imports, tests, and installations do not. Python package metadata
+may canonicalize `1.0.0001` to its PEP 440-equivalent `1.0.1`, while the
+packaged source and pipeline packets retain the four-digit application build.

@@ -26,6 +26,7 @@ def test_project_version_has_one_dynamic_source_and_packet_format() -> None:
         data = tomllib.load(stream)
 
     assert data["project"]["dynamic"] == ["version"]
+    assert data["project"]["license-files"] == ["LICENSE"]
     assert data["tool"]["hatch"]["version"]["path"] == ("src/transcript_weaver/_version.py")
     assert "/.transcript-weaver-build.lock" in data["tool"]["hatch"]["build"]["exclude"]
     assert re.fullmatch(r"\d+\.\d+\.\d{4}", __version__)
@@ -35,7 +36,9 @@ def test_project_version_has_one_dynamic_source_and_packet_format() -> None:
     with plugin_path.open("rb") as stream:
         plugin = tomllib.load(stream)
     assert plugin["project"]["dynamic"] == ["version"]
+    assert plugin["project"]["license-files"] == ["LICENSE"]
     assert plugin["tool"]["hatch"]["version"]["path"] == ("../../src/transcript_weaver/_version.py")
+    assert (plugin_path.parent / "LICENSE").read_bytes() == (project_root / "LICENSE").read_bytes()
     assert (
         plugin["project"]["entry-points"]["transcript_weaver.output_drivers"]["highlevel"]
         == "transcript_weaver_highlevel:driver"

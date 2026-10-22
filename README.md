@@ -278,14 +278,17 @@ opt-in. After all offline checks pass:
 TRANSCRIPT_WEAVER_LIVE_GEMINI=1 pytest --no-cov -m live_gemini tests/test_live_gemini.py
 ```
 
+That command resolves the configured test API key and sends only the harmless
+test transcript to Gemini. It does not access an Obsidian vault or Otter.
+
 The live Otter functional test uses the configured WSL/Windows Chrome session:
 
 ```bash
 TRANSCRIPT_WEAVER_LIVE_OTTER=1 pytest --no-cov -m live_otter tests/test_live_otter.py
 ```
 
-That command resolves the configured test API key and sends only the harmless test transcript
-to Gemini. It does not access an Obsidian vault or Otter.
+Before tagging or publishing a release, follow the coordinated core and plugin
+checklist in [`docs/releasing.md`](docs/releasing.md).
 
 ## License
 
