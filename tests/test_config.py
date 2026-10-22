@@ -1,4 +1,6 @@
 import json
+import re
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -75,7 +77,7 @@ def test_invalid_config_values_are_rejected(value: object, tmp_path: Path) -> No
 def test_invalid_existing_config_is_untouched(app_paths: ApplicationPaths) -> None:
     app_paths.config_file.parent.mkdir(parents=True)
     app_paths.config_file.write_text("{broken")
-    with pytest.raises(ConfigurationError, match=str(app_paths.config_file)):
+    with pytest.raises(ConfigurationError, match=re.escape(str(app_paths.config_file))):
         load_or_create_config(app_paths)
     assert app_paths.config_file.read_text() == "{broken"
 
@@ -106,6 +108,7 @@ def test_injected_platform_directories_are_used(tmp_path: Path) -> None:
     assert paths.log_directory == FakeDirs.user_log_path
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux path convention")
 def test_linux_xdg_and_fallback_paths(monkeypatch) -> None:
     from platformdirs.unix import Unix
 
@@ -129,6 +132,7 @@ def test_linux_xdg_and_fallback_paths(monkeypatch) -> None:
     assert paths.log_directory == Path("/home/example/.local/state/transcript-weaver/log")
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS path convention")
 def test_macos_paths(monkeypatch) -> None:
     from platformdirs.macos import MacOS
 
@@ -144,6 +148,7 @@ def test_macos_paths(monkeypatch) -> None:
     assert paths.log_directory == Path("/Users/example/Library/Logs/Transcript Weaver")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path convention")
 def test_windows_roaming_config_and_local_logs(monkeypatch) -> None:
     from platformdirs.windows import Windows
 
@@ -287,10 +292,11 @@ def test_nested_configuration_errors_name_exact_field(
 
 
 def test_vault_path_object_accepts_cwd_config_absolute_and_home(tmp_path: Path) -> None:
+    absolute_vault = str(tmp_path / "absolute-test-output")
     for vault in (
         {"path": "test-output", "relative_to": "cwd"},
         {"path": "test-output", "relative_to": "config"},
-        {"path": "/absolute/test-output"},
+        {"path": absolute_vault},
         {"path": "~/test-output"},
     ):
         value = json.loads(packaged_default_config_bytes())
@@ -301,7 +307,7 @@ def test_vault_path_object_accepts_cwd_config_absolute_and_home(tmp_path: Path) 
 def test_absolute_vault_rejects_relative_to(tmp_path: Path) -> None:
     value = json.loads(packaged_default_config_bytes())
     value["out"]["franks-example"]["vault"] = {
-        "path": "/absolute/test-output",
+        "path": str(tmp_path / "absolute-test-output"),
         "relative_to": "cwd",
     }
     with pytest.raises(ConfigurationError, match="must be omitted"):

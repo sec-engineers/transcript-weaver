@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0009 - 2026-10-21
+
+- Made the offline test suite portable across Linux, Windows, and macOS,
+  including native path, home-directory, and file-mode behavior.
+- Added Windows timezone data so configured IANA timezones work without a
+  separately installed system timezone database.
+- Clarified CI job names, pinned the Linux image, and updated GitHub actions
+  to their current Node.js 24 releases.
+
 ## 1.1.0008 - 2026-10-21
 
 - Added the GPL license file and project links to the separately

@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import subprocess
 import traceback
 import urllib.error
@@ -344,7 +345,8 @@ def test_invalid_provider_response_debug_artifact_requires_permission(tmp_path: 
     artifacts = list(paths.log_directory.glob("*-trweave-provider-response.txt"))
     assert len(artifacts) == 1
     assert artifacts[0].read_text() == '{"broken":'
-    assert artifacts[0].stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert artifacts[0].stat().st_mode & 0o777 == 0o600
     assert "saved sensitive raw provider response" in stderr.getvalue()
 
 
@@ -989,7 +991,10 @@ def test_destination_root_resolving_outside_vault_is_rejected(tmp_path: Path) ->
     vault.mkdir()
     outside = tmp_path / "outside"
     outside.mkdir()
-    (vault / "linked").symlink_to(outside, target_is_directory=True)
+    try:
+        (vault / "linked").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks unavailable")
     config = load_or_create_config(paths)
     enriched = packet()
     enriched["weave"] = {"type": "gratitude", "update_transcript": "thankful"}
@@ -1010,7 +1015,7 @@ def test_destination_root_validation_and_case_insensitive_lookup(tmp_path: Path)
     assert target == paths.config_file.parent / "vault" / "nested" / "Gratitude Journal.md"
 
     for bad_root, message in [
-        ("/absolute", "relative path beneath"),
+        (str(tmp_path / "absolute"), "relative path beneath"),
         (r"C:\absolute", "relative path beneath"),
         ("../escape", "must not use '..'"),
         ("", "nonempty string"),
@@ -1103,6 +1108,7 @@ def test_tilde_prompt_and_unknown_profile(tmp_path: Path, monkeypatch: pytest.Mo
     prompt = home / "prompt.md"
     prompt.write_text("home prompt")
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     paths = paths_with_config(tmp_path / "app")
     config = load_or_create_config(paths)
     assert resolve_prompt("~/prompt.md", config, paths)[0] == "home prompt"

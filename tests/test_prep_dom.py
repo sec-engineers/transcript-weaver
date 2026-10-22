@@ -238,7 +238,7 @@ def test_trwprep_cli_help_version_and_error(monkeypatch: pytest.MonkeyPatch, cap
     with pytest.raises(SystemExit) as caught:
         prep_cli.run(["--version"])
     assert caught.value.code == 0
-    assert "trwprep 1.1.0008" in capsys.readouterr().out
+    assert "trwprep 1.1.0009" in capsys.readouterr().out
 
     def fail(*args: object, **kwargs: object) -> None:
         raise SourceUnavailableError("not ready")

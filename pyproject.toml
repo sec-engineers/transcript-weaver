@@ -21,7 +21,11 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = ["platformdirs>=4.0,<5", "playwright>=1.45,<2"]
+dependencies = [
+  "platformdirs>=4.0,<5",
+  "playwright>=1.45,<2",
+  "tzdata>=2024.1; sys_platform == 'win32'",
+]
 
 [project.urls]
 Homepage = "https://github.com/sec-engineers/transcript-weaver"

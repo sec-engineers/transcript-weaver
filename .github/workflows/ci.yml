@@ -4,24 +4,30 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - name: Linux
+            runner: ubuntu-24.04
             python-version: "3.10"
-          - os: ubuntu-latest
+          - name: Linux
+            runner: ubuntu-24.04
             python-version: "3.11"
-          - os: ubuntu-latest
+          - name: Linux
+            runner: ubuntu-24.04
             python-version: "3.12"
-          - os: windows-latest
+          - name: Windows
+            runner: windows-latest
             python-version: "3.12"
-          - os: macos-latest
+          - name: macOS Apple silicon
+            runner: macos-latest
             python-version: "3.12"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]" -e "./plugins/highlevel"
@@ -29,5 +35,5 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy
-      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+      - if: matrix.runner == 'ubuntu-24.04' && matrix.python-version == '3.12'
         run: python -m transcript_weaver.build

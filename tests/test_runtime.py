@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -157,7 +158,8 @@ def test_byte_artifact_and_invalid_stage_extension(tmp_path: Path) -> None:
         content="not json",
     )
     assert text.read_text() == "not json"
-    assert text.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert text.stat().st_mode & 0o777 == 0o600
     with pytest.raises(DiagnosticError):
         build_diagnostic_path(tmp_path, RUN1, "trwinp", extension=".pdf")
 

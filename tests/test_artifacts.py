@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from transcript_weaver.artifacts import (
@@ -15,7 +16,8 @@ def test_permission_is_user_only_expires_and_can_be_disabled(tmp_path) -> None:
     path = permission_path(tmp_path)
 
     assert permission.expires_at == now + timedelta(hours=1)
-    assert path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
     assert read_permission(tmp_path, clock=now + timedelta(minutes=59)) == permission
     assert read_permission(tmp_path, clock=now + timedelta(hours=1)) is None
     assert disable_permission(tmp_path)
